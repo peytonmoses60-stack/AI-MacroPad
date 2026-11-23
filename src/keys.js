@@ -24,7 +24,13 @@ export const ACTIONS = {
   'stick-down': { app: 'claude', keys: '^+i', label: 'Joystick down: model menu (Ctrl+Shift+I)' },
 };
 
-const MODES = new Set(['confirm-effort', 'find-prompt']);
+const MODES = new Set(['confirm-effort', 'find-prompt', 'open-session']);
+
+// A Claude session id as the hooks report it. Nothing else is ever put into a link.
+const SESSION_ID = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+export function isSessionId(id) {
+  return typeof id === 'string' && SESSION_ID.test(id);
+}
 
 // One key, optionally with Ctrl and/or Shift. No Enter, no Space, no Alt, no sequences.
 const ONE_KEY = /^[\^+]{0,2}(\{(TAB|UP|DOWN|LEFT|RIGHT|ESC|HOME|END|PGUP|PGDN|F([1-9]|1[0-2]))\}|[a-z0-9,.\/\[\]\-=;'])$/i;
@@ -53,6 +59,9 @@ export function resolveActions(overrides = {}) {
 // ask(title, 'find-prompt') looks in the window for a permission prompt and resolves to
 //   { status: 'found' | 'none' | 'ambiguous' | ..., fields: [question, detail] }. It only looks.
 // There is deliberately no mode that presses a permission prompt's button.
+// ask(title, 'open-session', id) asks the Claude app to show one session, by opening the app's own
+//   claude://resume link for that id, and resolves to { status: 'opened' | 'refused' | 'error' }.
+//   It sends no keys and presses nothing. The id must be a session id; anything else is refused here.
 export function createKeySender({ platform = process.platform, spawnFn = spawn, timeoutMs = 6000 } = {}) {
   if (platform !== 'win32') {
     return { supported: false, run: async () => 'unsupported', ask: async () => ({ status: 'unsupported', fields: [] }), warm() {}, stop() {} };
@@ -95,6 +104,7 @@ export function createKeySender({ platform = process.platform, spawnFn = spawn, 
     if (!title) return Promise.resolve(['nofocus']);
     if (keys && !safeKeys(keys)) return Promise.resolve(['refused']);
     if (mode && !MODES.has(mode)) return Promise.resolve(['refused']);
+    if (mode === 'open-session' && !isSessionId(arg)) return Promise.resolve(['refused']);
     return new Promise(resolve => {
       const id = String(++seq);
       const timer = setTimeout(() => settle(id, 'error'), timeoutMs);

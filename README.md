@@ -47,7 +47,9 @@ Write down any time a session was waiting on you and its key was not amber or pu
 
 ## The keys
 
-- **Agent keys** bring that app's window forward and clear a finished or failed alert. They cannot pick a specific session inside Claude.
+- **Agent keys** bring that app's window forward and clear a finished or failed alert.
+  - **A Claude key also opens its own session** (Windows). The bridge asks the Claude app to show the session on that key, using the app's own link, `claude://resume?session=<id>`, with the id Claude reported for that session. It sends no keystrokes and clicks nothing.
+  - This link is not in Claude's documentation. It switched to the right session on Peyton's PC on 23 Nov 2026. On some other Claude versions people report that it opens a copy of the session instead of switching, and that it can pull a session running in a terminal into the app. If you see either, set `"jump": { "enabled": false }` in `config.json`; the key then only brings the Claude window forward.
 - **New chat, Copy and Paste** bring the Claude window forward and send Ctrl+N, Ctrl+C or Ctrl+V to it.
 - **The dial** changes Claude's effort level when you turn it. No press is needed: the bridge opens the effort menu, moves the highlight, and confirms once the dial rests. The Effort row shows the level Claude last reported, so it updates on Claude's next event.
   - Confirming is done by pressing that one menu item through Windows accessibility, and only after checking that the highlighted item is an effort level. If the bridge cannot check, it confirms nothing, leaves the menu open, and the line under the pad tells you to pick it in Claude.

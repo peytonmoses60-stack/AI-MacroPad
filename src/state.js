@@ -552,7 +552,9 @@ export class PadState {
         : `${def.name} → brought to front. Answer it in the app's own prompt`);
       else this.say('KEY', `${def.name} → brought to front`);
     }
-    return { focus: def.tool };
+    // Which session the key stands for right now, so the bridge can ask the app to show that one.
+    const jump = req ? this.sessions.get(req.key) : list[0];
+    return jump && !jump.test ? { focus: def.tool, session: jump.sessionId } : { focus: def.tool };
   }
 
   decide(how) {

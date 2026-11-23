@@ -6,6 +6,8 @@
 # but only if that item's name is an effort level, and answers confirmed or unverified.
 # find-prompt looks in the window for a permission prompt and answers  found TAB <question> TAB <detail>.
 # It only looks. Nothing in this script presses a permission prompt's buttons.
+# open-session takes a session id as a fifth field and asks the Claude app to show that session
+# by opening claude://resume?session=<id>, then answers opened. It sends no keys.
 # To try it by hand:  powershell -ExecutionPolicy Bypass -File src\win-keys.ps1
 # then type a line such as   1<TAB>Claude<TAB>^n   and press Enter.
 
@@ -123,6 +125,19 @@ while ($true) {
         $found = Get-Prompt $h
         $result = $found.status
         if ($found.status -eq 'found') { $extra = "`t" + (Clean-Text $found.question) + "`t" + (Clean-Text $found.detail) }
+      }
+    }
+    elseif ($mode -eq 'open-session') {
+      # Asks the Claude app to show one session, through the app's own link. No keys, no presses.
+      # Only a session id is accepted, so nothing else can ever be opened from here.
+      $sid = ''
+      if ($parts.Length -gt 4) { $sid = $parts[4] }
+      if ($sid -notmatch '^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$') { $result = 'refused' }
+      else {
+        Start-Process ('claude://resume?session=' + $sid)
+        Start-Sleep -Milliseconds 250
+        [void](Focus-Window $parts[1])
+        $result = 'opened'
       }
     }
     elseif (-not (Focus-Window $parts[1])) { $result = 'nofocus' }

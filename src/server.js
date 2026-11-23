@@ -9,7 +9,7 @@ import crypto from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { PadState, DEFAULT_SLOTS, DEFAULT_STALL } from './state.js';
-import { createKeySender, resolveActions } from './keys.js';
+import { createKeySender, resolveActions, isSessionId } from './keys.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAX_BODY = 1024 * 1024;
@@ -25,6 +25,9 @@ const DEFAULT_CONFIG = {
   screenPrompts: { enabled: true, afterMs: 3000, everyMs: 2500 },
   quietMinutes: 30,
   focusOnPress: true,
+  // Pressing a Claude key asks the Claude app to show that key's session (Windows only), through
+  // the app's own claude://resume link. Off: the key only brings the Claude window forward.
+  jump: { enabled: true },
   windowTitles: { claude: 'Claude', codex: 'Codex', gemini: '', muse: '' },
   shortcuts: {},
   stall: DEFAULT_STALL,
@@ -61,6 +64,7 @@ export function loadConfig(file) {
     approvals: { ...DEFAULT_CONFIG.approvals, ...(found.approvals || {}) },
     dial: { ...DEFAULT_CONFIG.dial, ...(found.dial || {}) },
     screenPrompts: { ...DEFAULT_CONFIG.screenPrompts, ...(found.screenPrompts || {}) },
+    jump: { ...DEFAULT_CONFIG.jump, ...(found.jump || {}) },
     windowTitles: { ...DEFAULT_CONFIG.windowTitles, ...(found.windowTitles || {}) },
     stall: { ...DEFAULT_STALL, ...(found.stall || {}) },
     shortcuts: found.shortcuts && typeof found.shortcuts === 'object' ? found.shortcuts : {},
@@ -318,9 +322,18 @@ export async function start({ dataDir, configFile, port: portOverride, quiet = f
           const result = state.press(String(body.key || ''));
           const title = result && result.focus && config.focusOnPress ? config.windowTitles[result.focus] : '';
           if (title) {
-            keys.run(title).then(outcome => {
+            const bringForward = () => keys.run(title).then(outcome => {
               if (outcome === 'nofocus' || outcome === 'error') state.note('PAD', `Could not bring the ${title} window forward`);
             });
+            // A Claude key stands for one session, so ask Claude to show that session, not just its window.
+            const canJump = result.focus === 'claude' && config.jump.enabled && isSessionId(result.session) && typeof keys.ask === 'function';
+            if (canJump) {
+              keys.ask(title, 'open-session', result.session).then(r => {
+                if (r && r.status === 'opened') return;
+                if (r && r.status !== 'unsupported') state.note('PAD', `Could not ask ${title} to show that session, so only its window was brought forward`);
+                return bringForward();
+              });
+            } else bringForward();
           }
           return send(res, 200, { ok: true });
         }

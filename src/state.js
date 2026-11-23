@@ -164,7 +164,8 @@ export class PadState {
   // Which key does this session live on? Pinned folder first, then where it was last time,
   // then the first free key, then a key whose sessions are all idle. Otherwise none for now:
   // promote() gives it a key as soon as it needs you.
-  assign(s) {
+  // reuseIdle: false stops it taking a key from idle sessions, so idle sessions never trade keys.
+  assign(s, { reuseIdle = true } = {}) {
     const defs = this.slotDefs.filter(d => d.tool === s.tool);
     if (!defs.length) return null;
     if (s.forceSlot && defs.some(d => d.id === s.forceSlot)) return s.forceSlot;
@@ -183,22 +184,27 @@ export class PadState {
     const reusable = open
       .filter(d => this.sessionsOn(d.id).every(x => x.state === 'idle'))
       .sort((a, b) => lastSeenOn(a.id) - lastSeenOn(b.id))[0];
-    if (reusable) {
+    if (reusable && reuseIdle) {
       for (const x of this.sessionsOn(reusable.id)) x.slot = null;
       return this.remember(s, reusable.id);
     }
     return null;
   }
 
+  // Sessions with no key take one when a key frees up or goes idle. Run wherever that can happen:
+  // a session ending, a key cleared, a session bumped by promote(). An idle session with no key
+  // takes only a free key, never another idle session's, or idle sessions would swap keys on
+  // every press.
   rebalance() {
     const waiting = [...this.sessions.values()].filter(s => !s.slot).sort((a, b) => this.urgency(a, b));
-    for (const s of waiting) s.slot = this.assign(s);
+    for (const s of waiting) s.slot = this.assign(s, { reuseIdle: this.view(s).state !== 'idle' });
   }
 
   // A session with no key that needs you (a request, a question, a failed turn) must still light up.
   // It takes a key from sessions that do not need you: idle ones first, then working ones, finished
   // ones last (their green light is an unread alert). A key whose sessions need you is never taken.
-  // The sessions it displaces are listed under the keys until a key frees up.
+  // A stalled-tool guess may be wrong, so it takes only idle or working keys, never a green one.
+  // The sessions it displaces take the next key that frees up or goes idle (rebalance).
   promote() {
     const urgent = s => { const v = this.view(s).state; return v === 'needs' || v === 'error'; };
     const waiting = [...this.sessions.values()].filter(s => !s.slot && urgent(s)).sort((a, b) => this.urgency(a, b));
@@ -206,6 +212,7 @@ export class PadState {
     const RANK = { idle: 0, working: 1, done: 2 };
     let moved = false;
     for (const s of waiting) {
+      const maxRank = this.view(s).guess ? RANK.working : RANK.done;
       const best = this.slotDefs
         .filter(d => d.tool === s.tool && !d.folders.length)
         .map(d => {
@@ -215,7 +222,7 @@ export class PadState {
           const last = on.length ? Math.max(...on.map(x => x.lastSeen)) : 0;
           return { d, on, rank, last };
         })
-        .filter(Boolean)
+        .filter(k => k && k.rank <= maxRank)
         .sort((a, b) => a.rank - b.rank || a.last - b.last)[0];
       if (!best) continue;
       for (const x of best.on) x.slot = null;
@@ -224,6 +231,7 @@ export class PadState {
       this.say('PAD', `${s.name} needs you, so it moved onto ${best.d.name}${from}`);
       moved = true;
     }
+    if (moved) this.rebalance();
     return moved;
   }
 
@@ -510,7 +518,7 @@ export class PadState {
   press(key) {
     const def = this.slotDefs.find(d => d.id === key);
     let result = {};
-    if (def) result = this.pressSlot(def);
+    if (def) { result = this.pressSlot(def); this.rebalance(); } // a cleared key may now be idle
     else if (key === 'accept' || key === 'deny') {
       if (this.screenVisible()) {
         this.say('KEY', `${key === 'accept' ? 'Accept' : 'Deny'} cannot answer this one. It is the Claude app's own prompt, so answer it in Claude`);

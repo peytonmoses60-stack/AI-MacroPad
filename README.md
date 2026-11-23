@@ -89,6 +89,12 @@ The pad does not answer these prompts. They are Claude's own safeguards, and you
 
 Each Claude session takes the first free Claude key and keeps it. A folder goes back to the key it used last time when that key is free. If all three keys are busy, an idle key is reused; otherwise the extra session is listed under the keys as "Not on a key".
 
+A session that is not on a key still gets one when it matters:
+
+- **When it needs you** (a permission request, a question or a failed turn), it takes a key straight away. It takes an idle session's key first, then a working session's, and a finished (green) session's last, since green is an unread alert. It never takes the key of a session that also needs you. The session it moves off waits under the keys.
+- **When the stalled-tool guess says it may be waiting on you,** it takes only an idle or working key, never a green one. The guess can be wrong, and an unread alert should not be lost to it.
+- **When a key frees up or goes idle** (a session ends, or you press a key to clear its alert), a waiting session that is working, finished or needs you takes it. A waiting session that is merely idle takes only a key with no session on it, so pressing keys never shuffles idle sessions around.
+
 To pin a folder to a key, edit `config.json` (created on first start) and restart the bridge:
 
 ```json

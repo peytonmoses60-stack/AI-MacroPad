@@ -45,6 +45,7 @@ This is the engineering assessment the review notes asked for.
 | File-edit permission prompt | Implemented, unverified on Windows |
 | Failed turn (red), session end (dim), question or plan review (purple) | Implemented, unverified on Windows |
 | State restored after a bridge restart; behaviour with more than three sessions | Implemented, unverified on Windows |
+| A session with no key gets one when it needs you (real request, question or failed turn: any key but one that also needs you; stalled-tool guess: idle or working keys only), and a bumped session gets a key back when one goes idle | Implemented with tests (`test/state.test.js`), replayed on the live bridge on Windows 23 Nov; not yet seen with real sessions. Added after V12 failed |
 | Jumping to one specific session inside Claude | **Unsupported.** Claude Desktop documents no way to do it |
 | Showing a prompt owned by the Desktop app (browser site, use of another program) | Implemented, unverified on Windows. The bridge reads the prompt off the Claude window through Windows accessibility, turns the key amber early and shows the exact question |
 | Answering such a prompt from the pad | **Not built, on purpose.** No permission request reaches the pad, so answering would mean software pressing "Allow" in Claude's window. See "Open decisions" |
@@ -140,7 +141,7 @@ Needs the PC. Record each as passed, failed or not tried, with the trace lines t
 | V9 | A failed turn turns the key red; closing a session frees the key | Not tried |
 | V10 | A question or plan review turns the key purple | Not tried |
 | V11 | After restarting the bridge, alerts come back and nothing is held | Not tried |
-| V12 | Four or more sessions: the fourth is listed as "not on a key" or takes an idle one | Not tried |
+| V12 | Four or more sessions: the fourth is listed as "not on a key" or takes an idle one | **Failed, 23 Nov, then fixed.** With all three keys green, a fourth session was listed as "no key", then asked a question and got a permission-prompt notification, and no key lit. Trace: `18:00:59.515Z PermissionRequest tool_name=AskUserQuestion`, `18:01:05.497Z Notification notification_type=permission_prompt`. Fixed by taking a key when a session needs you and giving a bumped session a key back when one goes idle (see the status table); re-check with real sessions |
 | V13 | A long terminal command (several minutes) stays blue and never shows as a guess | Not tried |
 | V14 | Turning the dial changes the effort level with no press, the log says "confirmed", and turning right raises it | Not tried |
 | V15 | When Claude shows "Allow Claude to use ...?" or "Allow Claude to act on ...?", the key turns amber within a few seconds and the card shows that exact question, with Accept dark | Not tried |

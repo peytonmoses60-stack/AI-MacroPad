@@ -121,6 +121,55 @@ test('a session that took a key this way can be answered from the pad', () => {
   assert.equal(answer, 'allow');
 });
 
+test('a session bumped off its key gets one back as soon as a key goes idle', () => {
+  const { pad, ev, slot, clock } = make();
+  for (const id of ['a', 'b', 'c']) { ev(id, 'UserPromptSubmit'); ev(id, 'Stop'); clock.t += 10; }
+  ev('d', 'UserPromptSubmit');
+  pad.openRequest('claude', { session_id: 'd', cwd: 'C:\\dev\\d', hook_event_name: 'PermissionRequest', tool_name: 'Bash', tool_input: { command: 'npm test' } }, () => {});
+  assert.equal(slot('claude1').folder, 'd', 'd took Claude 1 from a');
+  clock.t += ARM_MS + 10;
+  pad.press('accept');
+  ev('d', 'PostToolUse', { tool_name: 'Bash' });
+  ev('d', 'Stop');
+  clock.t += 10;
+  pad.press('claude1');
+  assert.equal(slot('claude1').folder, 'a', 'clearing d made Claude 1 idle, so a took it back');
+  assert.equal(slot('claude1').state, 'done', "a's unread green alert is kept");
+  pad.press('claude2');
+  pad.press('claude3');
+  assert.deepEqual(['claude1', 'claude2', 'claude3'].map(k => slot(k).folder), ['a', 'b', 'c']);
+  assert.deepEqual(pad.snapshot().overflow.map(o => [o.name, o.state]), [['d', 'idle']], 'only the idle session waits');
+});
+
+test('idle sessions without a key do not push other idle sessions around', () => {
+  const { pad, ev, slot, clock } = make();
+  for (const id of ['a', 'b', 'c']) { ev(id, 'UserPromptSubmit'); ev(id, 'Stop'); clock.t += 10; }
+  ev('d', 'UserPromptSubmit');
+  ev('d', 'PermissionRequest', { tool_name: 'Bash', tool_input: { command: 'npm test' } });
+  ev('d', 'PostToolUse', { tool_name: 'Bash' });
+  ev('d', 'Stop');
+  for (const k of ['claude1', 'claude2', 'claude3', 'claude1', 'claude2', 'claude3']) { clock.t += 10; pad.press(k); }
+  const placed = ['claude1', 'claude2', 'claude3'].map(k => slot(k).folder);
+  for (const k of ['claude1', 'claude2', 'claude3']) { clock.t += 10; pad.press(k); }
+  assert.deepEqual(['claude1', 'claude2', 'claude3'].map(k => slot(k).folder), placed, 'pressing keys does not reshuffle sessions');
+  assert.equal(pad.snapshot().overflow.length, 1);
+});
+
+test('a stalled-tool guess takes an idle or working key, never a green one', () => {
+  const { pad, ev, slot, clock } = make();
+  for (const id of ['a', 'b', 'c']) { ev(id, 'UserPromptSubmit'); ev(id, 'Stop'); clock.t += 10; }
+  ev('d', 'UserPromptSubmit');
+  ev('d', 'PreToolUse', { tool_name: 'Read', tool_use_id: 't1' });
+  clock.t += 20_000;
+  pad.tick();
+  assert.equal(pad.snapshot().overflow[0].state, 'needs', 'd looks like it is waiting on you');
+  assert.deepEqual(['claude1', 'claude2', 'claude3'].map(k => slot(k).state), ['done', 'done', 'done'], 'a guess does not clear a green alert');
+  ev('b', 'UserPromptSubmit');
+  clock.t += 1000;
+  pad.tick();
+  assert.equal(slot('claude2').folder, 'd', 'once a key is only working, the guess takes it');
+});
+
 test('a folder returns to the key it used last time', () => {
   const { ev, slot } = make();
   ev('a', 'UserPromptSubmit');

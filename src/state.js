@@ -162,7 +162,8 @@ export class PadState {
   }
 
   // Which key does this session live on? Pinned folder first, then where it was last time,
-  // then the first free key, then a key whose sessions are all idle. Otherwise none.
+  // then the first free key, then a key whose sessions are all idle. Otherwise none for now:
+  // promote() gives it a key as soon as it needs you.
   assign(s) {
     const defs = this.slotDefs.filter(d => d.tool === s.tool);
     if (!defs.length) return null;
@@ -192,6 +193,38 @@ export class PadState {
   rebalance() {
     const waiting = [...this.sessions.values()].filter(s => !s.slot).sort((a, b) => this.urgency(a, b));
     for (const s of waiting) s.slot = this.assign(s);
+  }
+
+  // A session with no key that needs you (a request, a question, a failed turn) must still light up.
+  // It takes a key from sessions that do not need you: idle ones first, then working ones, finished
+  // ones last (their green light is an unread alert). A key whose sessions need you is never taken.
+  // The sessions it displaces are listed under the keys until a key frees up.
+  promote() {
+    const urgent = s => { const v = this.view(s).state; return v === 'needs' || v === 'error'; };
+    const waiting = [...this.sessions.values()].filter(s => !s.slot && urgent(s)).sort((a, b) => this.urgency(a, b));
+    if (!waiting.length) return false;
+    const RANK = { idle: 0, working: 1, done: 2 };
+    let moved = false;
+    for (const s of waiting) {
+      const best = this.slotDefs
+        .filter(d => d.tool === s.tool && !d.folders.length)
+        .map(d => {
+          const on = this.sessionsOn(d.id);
+          if (on.some(urgent)) return null;
+          const rank = on.length ? Math.max(...on.map(x => RANK[this.view(x).state] ?? 1)) : -1;
+          const last = on.length ? Math.max(...on.map(x => x.lastSeen)) : 0;
+          return { d, on, rank, last };
+        })
+        .filter(Boolean)
+        .sort((a, b) => a.rank - b.rank || a.last - b.last)[0];
+      if (!best) continue;
+      for (const x of best.on) x.slot = null;
+      s.slot = this.remember(s, best.d.id);
+      const from = best.on.length ? ` from ${best.on.map(x => x.name).join(', ')}` : '';
+      this.say('PAD', `${s.name} needs you, so it moved onto ${best.d.name}${from}`);
+      moved = true;
+    }
+    return moved;
   }
 
   endSession(tool, p) {
@@ -339,7 +372,7 @@ export class PadState {
     }
     if (this.screen && !stuck.includes(this.screen.key)) this.screen = null;
     const sig = stuck.join('|') + (this.screen ? `#${this.screen.question}` : '');
-    if (sig !== this.stallSig) { this.stallSig = sig; this.changed(); }
+    if (sig !== this.stallSig) { this.stallSig = sig; this.promote(); this.changed(); }
   }
 
   /* ----- prompts that belong to the app ----- */
@@ -414,9 +447,10 @@ export class PadState {
       return null;
     }
     const s = this.touch(tool, p, opts.forceSlot);
+    const req = this.addRequest(s, p, null);
+    this.promote(); // a session with no key gets one now that it needs you
     const hold = this.settings.fromPad && this.present && !!s.slot;
-    const req = this.addRequest(s, p, hold ? respond : null);
-    if (!hold) respond(null);
+    if (hold) req.respond = respond; else respond(null);
     this.retarget();
     this.changed();
     return req.id;
@@ -458,6 +492,7 @@ export class PadState {
   }
 
   retarget() {
+    this.promote();
     if (this.target && this.requests.has(this.target)) return;
     const onKeys = [...this.requests.values()].filter(r => this.sessions.get(r.key)?.slot);
     this.target = onKeys.length === 1 ? onKeys[0].id : null;

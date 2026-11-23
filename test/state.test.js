@@ -73,6 +73,54 @@ test('an idle key is reused before a new session is left without one', () => {
   assert.equal(slot('claude1').folder, 'd', 'the idle session gave up its key');
 });
 
+test('a session with no key takes one as soon as it needs you (all keys green)', () => {
+  const { pad, ev, slot, clock } = make();
+  for (const id of ['a', 'b', 'c']) { ev(id, 'UserPromptSubmit'); ev(id, 'Stop'); clock.t += 10; }
+  ev('d', 'UserPromptSubmit');
+  assert.equal(pad.snapshot().overflow.length, 1, 'three green keys: the new session has none yet');
+  ev('d', 'PermissionRequest', { tool_name: 'Bash', tool_input: { command: 'npm test' } });
+  assert.equal(slot('claude1').folder, 'd', 'it took the key of the oldest finished session');
+  assert.deepEqual([slot('claude1').state, slot('claude1').kind], ['needs', 'permission']);
+  assert.deepEqual(pad.snapshot().overflow.map(o => o.name), ['a'], 'the displaced session is listed under the keys');
+  assert.equal(pad.snapshot().request.slot, 'claude1', 'the request is on screen');
+  ev('b', 'SessionEnd');
+  assert.equal(slot('claude2').folder, 'a', 'the displaced session gets the next free key');
+});
+
+test('a needy session prefers an idle key, then a working one, and keeps finished alerts longest', () => {
+  const { pad, ev, slot, clock } = make();
+  ev('a', 'UserPromptSubmit'); ev('a', 'Stop'); clock.t += 10;
+  ev('b', 'UserPromptSubmit'); clock.t += 10;
+  ev('c', 'UserPromptSubmit'); ev('c', 'Stop'); clock.t += 10;
+  ev('d', 'UserPromptSubmit');
+  ev('d', 'PreToolUse', { tool_name: 'AskUserQuestion' });
+  assert.equal(slot('claude2').folder, 'd', 'the working session gave way, not a finished one');
+  assert.equal(slot('claude1').state, 'done');
+  assert.equal(slot('claude3').state, 'done');
+  assert.deepEqual(pad.snapshot().overflow.map(o => o.name), ['b']);
+});
+
+test('a key whose session needs you is never taken', () => {
+  const { pad, ev, slot } = make();
+  for (const id of ['a', 'b', 'c']) { ev(id, 'UserPromptSubmit'); ev(id, 'StopFailure', { error: 'rate_limit' }); }
+  ev('d', 'UserPromptSubmit');
+  ev('d', 'PermissionRequest', { tool_name: 'Edit', tool_input: { file_path: 'x.js' } });
+  assert.deepEqual(['claude1', 'claude2', 'claude3'].map(k => slot(k).folder), ['a', 'b', 'c']);
+  assert.equal(pad.snapshot().overflow[0].state, 'needs', 'it waits under the keys, still showing it needs you');
+});
+
+test('a session that took a key this way can be answered from the pad', () => {
+  const { pad, ev, clock } = make();
+  for (const id of ['a', 'b', 'c']) { ev(id, 'UserPromptSubmit'); ev(id, 'Stop'); }
+  ev('d', 'UserPromptSubmit');
+  let answer;
+  pad.openRequest('claude', { session_id: 'd', cwd: 'C:\\dev\\d', hook_event_name: 'PermissionRequest', tool_name: 'Bash', tool_input: { command: 'npm test' } }, a => { answer = a; });
+  assert.equal(answer, undefined, 'the request is held for the pad, not handed straight back');
+  clock.t += ARM_MS + 10;
+  pad.press('accept');
+  assert.equal(answer, 'allow');
+});
+
 test('a folder returns to the key it used last time', () => {
   const { ev, slot } = make();
   ev('a', 'UserPromptSubmit');

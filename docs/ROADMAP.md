@@ -39,11 +39,11 @@ This is the engineering assessment the review notes asked for.
 | Stalled-tool fallback for a prompt Claude does not report (`mcp__Claude_Browser__navigate`, 15 s) | **Confirmed on Windows** |
 | Event trace written to `data/trace.log` | **Confirmed on Windows** |
 | Updater applied update 2 over the first install | **Confirmed on Windows** |
-| Accept and Deny round trip through the hook; timeout; answering in Claude instead | Implemented, unverified on Windows |
-| Shortcut keys, dial, joystick, and bringing the Claude window forward (`src/win-keys.ps1`) | Implemented, unverified on Windows |
-| Turning the dial changes effort with no press | Implemented, unverified on Windows. It depends on Claude exposing its effort menu to Windows accessibility; if it does not, the dial moves the highlight and Peyton confirms in Claude |
-| File-edit permission prompt | Implemented, unverified on Windows |
-| Failed turn (red), session end (dim), question or plan review (purple) | Implemented, unverified on Windows |
+| Accept and Deny round trip through the hook; timeout; answering in Claude instead | **Confirmed on Windows** for Accept, Deny and answering in Claude (V1 to V3). The two-minute timeout passed only with a simulated request (V4) |
+| Shortcut keys, dial, joystick, and bringing the Claude window forward (`src/win-keys.ps1`) | **Confirmed on Windows** for New chat, joystick, dial press and bringing Claude forward (V6 to V8). Copy and Paste not tried |
+| Turning the dial changes effort with no press | **Unreliable on Windows** (V14): worked 4 out of 4 times once, failed at other times. It depends on Claude exposing its effort menu to Windows accessibility; when it cannot confirm, the dial moves the highlight and Peyton confirms in Claude |
+| File-edit permission prompt | **Confirmed on Windows** (V5) |
+| Failed turn (red), session end (dim), question or plan review (purple) | Session end **confirmed on Windows**. Red and purple pass only with simulated events (V9, V10) |
 | State restored after a bridge restart; behaviour with more than three sessions | Implemented, unverified on Windows |
 | A session with no key gets one when it needs you (real request, question or failed turn: any key but one that also needs you; stalled-tool guess: idle or working keys only), and a bumped session gets a key back when one goes idle | Implemented with tests (`test/state.test.js`), replayed on the live bridge on Windows 23 Nov; not yet seen with real sessions. Added after V12 failed |
 | Jumping to one specific session inside Claude | **Confirmed on Windows** (V16, 23 Nov, Claude Desktop 6.28899.6). Pressing a Claude key opens `claude://resume?session=<id>` for its session, and Claude switches to that session without making a copy. When a new session takes over a key, the key opens the new session, not the old one. The link is undocumented; reports say other Claude versions open a copy instead |
@@ -131,20 +131,20 @@ Needs the PC. Record each as passed, failed or not tried, with the trace lines t
 
 | ID | Check | Result |
 |---|---|---|
-| V1 | Accept from the pad lets a real command run | Not tried |
-| V2 | Deny from the pad refuses it | Not tried |
-| V3 | While the pad is waiting, Claude still shows its own prompt and answering there works | Not tried |
-| V4 | An unanswered request falls back to Claude after two minutes | Not tried |
-| V5 | A file-edit prompt arrives as a permission request | Not tried |
-| V6 | New chat, Copy and Paste reach the Claude window | Not tried |
-| V7 | Dial and joystick shortcuts reach the Claude window | Not tried |
-| V8 | An agent key actually brings Claude to the front | Not tried |
-| V9 | A failed turn turns the key red; closing a session frees the key | Not tried |
-| V10 | A question or plan review turns the key purple | Not tried |
-| V11 | After restarting the bridge, alerts come back and nothing is held | Not tried |
+| V1 | Accept from the pad lets a real command run | **Passed, 23 Nov, with a tool request rather than a shell command.** A session asked for folder access; Peyton pressed Accept on the pad at 12:53:44 local, Claude's own prompt cleared and the tool ran (screen recording). Trace: `17:53:40.409Z PermissionRequest tool_name=mcp__ccd_directory__request_directory`. A shell command has not been accepted from the pad yet. The same path was also checked with simulated requests through the real hook: the hook printed `allow` |
+| V2 | Deny from the pad refuses it | **Passed, 23 Nov.** Same session, second request; Deny on the pad at 12:53:59 local, Claude's prompt cleared and Claude showed the tool as Failed. Trace: `17:53:55.981Z PermissionRequest tool_name=mcp__ccd_directory__request_directory` |
+| V3 | While the pad is waiting, Claude still shows its own prompt and answering there works | **Passed, 23 Nov.** Claude showed its own "Allow Claude to ..." prompt while the key was amber and Accept was lit. Both file prompts in V5 were answered with Allow in Claude: each time the key went back to blue and the change went through. Trace: `18:01:42.444Z PermissionRequest tool_name=Write`, `18:01:46.457Z PostToolUse tool_name=Write`. Answering Deny in Claude was not tried |
+| V4 | An unanswered request falls back to Claude after two minutes | **Passed with a simulated request, 23 Nov.** A request fed through the real hook with the pad open was left alone; after 120.1 s the hook exited 0 and printed nothing, so Claude's own prompt decides. Not yet seen with a real session |
+| V5 | A file-edit prompt arrives as a permission request | **Passed, 23 Nov.** In a Manual-mode session, creating and then editing a file each turned the key amber with Claude's "Allow Claude to write/edit pad-test.txt?" on screen. Trace: `18:01:42.444Z PermissionRequest tool_name=Write`, `18:02:12.113Z PermissionRequest tool_name=Edit` |
+| V6 | New chat, Copy and Paste reach the Claude window | **New chat passed; Copy and Paste not tried.** New chat at 12:53:20 and 13:00:39 local brought Claude forward with a new session open (screen recordings) |
+| V7 | Dial and joystick shortcuts reach the Claude window | **Passed, 23 Nov.** Joystick left and right switched sessions, up opened the permission-mode menu, down opened the model menu (confirmed by Peyton), and a dial press opened the effort menu. Whether the dial then confirms is V14 |
+| V8 | An agent key actually brings Claude to the front | **Passed**, now as part of V16: each key opens its own session and Claude comes forward |
+| V9 | A failed turn turns the key red; closing a session frees the key | **Closing passed with real sessions; red passed only with simulated events.** Real `SessionEnd` events freed their keys (for example `18:02:28.065Z SessionEnd`). A simulated `StopFailure` through the real hook turned the key red with "Turn failed: rate_limit"; no real turn has failed yet |
+| V10 | A question or plan review turns the key purple | **Passed with simulated events only.** A simulated `AskUserQuestion` through the real hook turned the key purple. The one real question seen (V12) came from a session with no key, so nothing lit; that is now fixed but not re-checked |
+| V11 | After restarting the bridge, alerts come back and nothing is held | Not tried. The bridge was restarted several times on 23 Nov, but nobody checked the alerts afterwards |
 | V12 | Four or more sessions: the fourth is listed as "not on a key" or takes an idle one | **Failed, 23 Nov, then fixed.** With all three keys green, a fourth session was listed as "no key", then asked a question and got a permission-prompt notification, and no key lit. Trace: `18:00:59.515Z PermissionRequest tool_name=AskUserQuestion`, `18:01:05.497Z Notification notification_type=permission_prompt`. Fixed by taking a key when a session needs you and giving a bumped session a key back when one goes idle (see the status table); re-check with real sessions |
-| V13 | A long terminal command (several minutes) stays blue and never shows as a guess | Not tried |
-| V14 | Turning the dial changes the effort level with no press, the log says "confirmed", and turning right raises it | Not tried |
+| V13 | A long terminal command (several minutes) stays blue and never shows as a guess | Not tried with several minutes. A simulated `PowerShell` tool left running for 16.5 s stayed blue while a quick tool turned amber after 15 s |
+| V14 | Turning the dial changes the effort level with no press, the log says "confirmed", and turning right raises it | **Unreliable.** Failed twice at 12:39 local ("could not confirm it for you"). Passed 4 out of 4 from 12:52:56 to 12:53:06: each turn logged "confirmed" and Claude's effort moved High, Low, Max, High to match. Peyton reported it not working again later on 23 Nov; that attempt is not in the log because the bridge had restarted. Needs a look at what Claude's effort menu exposes to Windows accessibility when it fails |
 | V16 | With two or more sessions on keys, pressing a Claude key switches Claude to that key's session, with no copy of the session appearing in the sidebar | **Passed, 23 Nov, Claude Desktop 6.28899.6.** The link passed by hand first. Then Peyton pressed Claude 1, 2 and 3 in turn from 13:53:56 to 13:54:11: Claude switched to each key's own session with no copy, and the pad logged no "Could not ask Claude to show that session" fallback. When a new session replaced the one on a key, the key opened the new session, not the old one. Re-run after each Claude update |
 | V15 | When Claude shows "Allow Claude to use ...?" or "Allow Claude to act on ...?", the key turns amber within a few seconds and the card shows that exact question, with Accept dark | Not tried |
 

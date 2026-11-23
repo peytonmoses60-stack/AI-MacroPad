@@ -1,0 +1,690 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Pad</title>
+<style>
+/* Layout: a dark desk mat. The pad sits top-down on the left as the one physical object;
+   the bridge's console (agents, approval, test events, log) runs down the right.
+   Stacks pad-first on narrow windows. System fonts only: this page makes no outside requests. */
+:root{
+  color-scheme: dark;
+  --desk:#0b0c0e; --mat:#101215; --raise:#171a1e; --line:#22262c; --line-2:#30353d;
+  --ink:#e8eaee; --ink-2:#a4aab4; --ink-3:#6d747f;
+  --plate-hi:#54575d; --plate:#33363a; --plate-lo:#1b1c1f; --well:#060607;
+  --board:#0a0a0c; --ring:rgba(196,202,212,.20); --silk:#a3a8b0;
+  --frost-hi:rgba(208,211,217,.74); --frost-lo:rgba(160,164,171,.68);
+  --frost-rim:rgba(255,255,255,.24); --frost-edge:rgba(255,255,255,.55);
+  --cap-ink:#0c0d0f; --stem:rgba(60,68,108,.46); --stem-mark:rgba(120,132,190,.75);
+  --blk-hi:#222427; --blk-lo:#0c0d0f; --icon:#f2f3f5;
+  --gate-hi:#a9acb2; --gate-lo:#5c5f65; --led-off:#34363a;
+  --steel:#b7c3d6;
+  --led-work:#3f7cff; --led-need:#ffab2e; --led-done:#34d17f; --led-idle:#dfe7f2; --led-err:#ff4a4a; --led-ask:#b48cff;
+  --shadow-deep:rgba(0,0,0,.78); --hilite:rgba(255,255,255,.085);
+  --font-label:"Bahnschrift SemiCondensed","Bahnschrift","Barlow Semi Condensed","Arial Narrow",system-ui,sans-serif;
+  --font-body:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,sans-serif;
+  --font-mono:"Cascadia Mono","Cascadia Code",Consolas,ui-monospace,monospace;
+}
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+body{margin:0;background:var(--desk);color:var(--ink);font-family:var(--font-body);font-size:15px;line-height:1.45}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--steel);outline-offset:3px}
+
+.bench{max-width:1120px;margin:0 auto;padding:28px 16px 56px;display:grid;gap:30px}
+
+/* ---------- header ---------- */
+.top{display:grid;gap:10px}
+.top-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px}
+h1{margin:0;font:600 clamp(26px,4vw,34px)/1.05 var(--font-label);letter-spacing:.05em;text-transform:uppercase}
+.sim-chip{display:inline-flex;align-items:center;gap:8px;font:500 12px/1 var(--font-mono);color:var(--ink-2);
+  border:1px solid var(--line-2);border-radius:999px;padding:6px 11px}
+.sim-chip::before{content:"";width:7px;height:7px;border-radius:50%;border:1.5px solid var(--ink-3)}
+.sim-chip[data-live="true"]::before{background:var(--led-done);border-color:var(--led-done);box-shadow:0 0 8px var(--led-done)}
+.sim-chip[data-live="false"]{color:var(--led-need);border-color:color-mix(in srgb,var(--led-need) 45%,var(--line-2))}
+.lede{margin:0;max-width:62ch;color:var(--ink-2)}
+
+/* ---------- stage ---------- */
+.stage{display:grid;grid-template-columns:minmax(300px,460px) minmax(0,1fr);gap:44px;align-items:start}
+.deck{display:grid;gap:18px;min-width:0;position:sticky;top:18px}
+.console{display:grid;gap:28px;min-width:0}
+.panel{display:grid;gap:12px;min-width:0}
+h2{margin:0;font:600 12px/1 var(--font-label);letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3)}
+.panel-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 14px}
+@media (max-width:900px){
+  .stage{grid-template-columns:minmax(0,1fr);gap:30px}
+  .deck{position:static}
+  .pad-wrap{max-width:440px;margin-inline:auto;width:100%}
+}
+
+/* ---------- the pad ---------- */
+.pad-wrap{position:relative;container-type:inline-size}
+.pad{position:relative;padding:6.2cqw;border-radius:10.5cqw;
+  background:linear-gradient(150deg,var(--plate-hi),var(--plate) 34%,var(--plate-lo));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.2),inset 0 -2px 0 var(--shadow-deep),0 0 0 1px var(--well),
+    0 34px 60px -22px var(--shadow-deep),0 10px 18px -8px var(--shadow-deep)}
+.pad::before{content:"";position:absolute;inset:3.3cqw;border-radius:7.6cqw;pointer-events:none;
+  background:linear-gradient(150deg,var(--plate-lo),var(--plate));
+  box-shadow:inset 0 2px 3px var(--shadow-deep),0 1px 0 var(--hilite)}
+.plate{position:relative;border-radius:5.2cqw;background:var(--board);padding:6.2cqw 6.6cqw 8.4cqw;
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1.7cqw;
+  box-shadow:0 0 0 1.1cqw var(--ring),inset 0 0 0 1px var(--hilite)}
+.screw{position:absolute;width:2.8cqw;aspect-ratio:1;border-radius:50%;pointer-events:none;
+  background:radial-gradient(circle,var(--well) 36%,var(--blk-hi) 42%,var(--blk-lo) 100%);box-shadow:0 0 0 1px var(--hilite)}
+.s1{top:2cqw;left:2cqw}.s2{top:2cqw;right:2cqw}.s3{bottom:2cqw;left:2cqw}.s4{bottom:2cqw;right:2cqw}
+.silk{position:absolute;font:500 clamp(8px,2.45cqw,11.5px)/1 var(--font-body);color:var(--silk);letter-spacing:.03em;white-space:nowrap;pointer-events:none}
+.silk-top{top:1.2cqw;left:50%;transform:translateX(-50%);font-size:clamp(11px,3.7cqw,17px)}
+.silk-left{left:2.1cqw;top:50%;writing-mode:vertical-rl;transform:translateY(-50%) rotate(180deg)}
+.silk-right{right:2.1cqw;top:50%;writing-mode:vertical-rl;transform:translateY(-50%)}
+.silk-bottom{bottom:2.7cqw;left:50%;transform:translateX(-50%)}
+.cell{position:relative;aspect-ratio:1;display:grid;place-items:center}
+
+/* state colour, shared by keys, list dots and the legend */
+[data-key]{--c:transparent}
+[data-state="working"]{--c:var(--led-work)}
+[data-state="needs"]{--c:var(--led-need)}
+[data-state="ask"]{--c:var(--led-ask)}
+[data-state="done"]{--c:var(--led-done)}
+[data-state="idle"]{--c:var(--led-idle)}
+[data-state="error"]{--c:var(--led-err)}
+[data-state="off"]{--c:transparent}
+[data-key="accept"]{--c:var(--led-done)}
+
+.key{position:relative;aspect-ratio:1;border:0;padding:0;margin:0;background:none;cursor:pointer;border-radius:19%;-webkit-tap-highlight-color:transparent}
+.cap{position:absolute;inset:0;display:block;border-radius:inherit;transition:transform .06s ease}
+.key:active .cap{transform:translateY(1.5px) scale(.972)}
+.legend{position:absolute;left:0;right:0;bottom:9%;text-align:center;pointer-events:none;
+  font:600 clamp(8px,2.3cqw,11px)/1 var(--font-label);letter-spacing:.07em;text-transform:uppercase}
+.pad[data-labels="false"] .legend{display:none}
+
+/* frosted caps: lit from the switch underneath */
+.frost .cap{background:linear-gradient(180deg,var(--frost-hi),var(--frost-lo));box-shadow:0 3px 5px var(--shadow-deep)}
+.frost .cap::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  box-shadow:inset 0 0 0 max(2px,.9cqw) var(--frost-rim),inset 0 1px 0 var(--frost-edge)}
+.frost .legend{color:var(--cap-ink)}
+.light{position:absolute;inset:0;border-radius:inherit;opacity:0;pointer-events:none;transition:opacity .35s ease;
+  background:radial-gradient(circle at 50% 40%,color-mix(in srgb,var(--c) 28%,white) 0%,color-mix(in srgb,var(--c) 76%,white) 34%,var(--c) 74%,color-mix(in srgb,var(--c) 82%,black) 100%);
+  box-shadow:0 0 26px 3px color-mix(in srgb,var(--c) 48%,transparent)}
+.stem{position:absolute;left:50%;top:50%;width:31%;aspect-ratio:1;transform:translate(-50%,-50%);border-radius:50%;background:var(--stem);pointer-events:none}
+.stem::before,.stem::after{content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);border-radius:1px;background:var(--stem-mark)}
+.stem::before{width:48%;height:13%}
+.stem::after{width:13%;height:48%}
+
+/* the wide cap is one key sitting on two switches */
+.key.wide{grid-column:span 2;aspect-ratio:auto;border-radius:9.3% / 19%}
+.wide .stem{width:14.8%}
+.wide .s-l{left:23.8%}
+.wide .s-r{left:76.2%}
+.wide .light{background:radial-gradient(ellipse 70% 90% at 50% 44%,color-mix(in srgb,var(--c) 30%,white) 0%,color-mix(in srgb,var(--c) 80%,white) 40%,var(--c) 100%)}
+
+/* black caps: dished top, printed icon */
+.blk .cap{background:linear-gradient(165deg,var(--blk-hi),var(--blk-lo));box-shadow:inset 0 1px 0 var(--hilite),0 3px 5px var(--shadow-deep)}
+.blk .legend{color:var(--ink-2);bottom:8%}
+.dish{position:absolute;left:50%;top:9%;width:62%;aspect-ratio:1;transform:translateX(-50%);border-radius:50%;display:grid;place-items:center;pointer-events:none;
+  background:radial-gradient(circle at 50% 28%,var(--blk-lo),var(--blk-hi));box-shadow:inset 0 2px 4px var(--shadow-deep),0 1px 0 var(--hilite)}
+.pad[data-labels="false"] .dish{top:50%;width:70%;transform:translate(-50%,-50%)}
+.ico{width:52%;height:52%;fill:none;stroke:var(--icon);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+
+[data-key][data-state="idle"] .light{opacity:.3}
+[data-key][data-state="working"] .light{opacity:.78;animation:soft 3.8s ease-in-out infinite}
+[data-key][data-state="needs"] .light{opacity:1;animation:breathe 1.8s ease-in-out infinite}
+[data-key][data-state="ask"] .light{opacity:1;animation:breathe 1.8s ease-in-out infinite}
+[data-key][data-state="done"] .light{opacity:.85}
+[data-key][data-state="error"] .light{opacity:.9;animation:blink 2.6s steps(1,end) infinite}
+[data-key][data-state="arming"] .light{opacity:.22}
+[data-key][data-state="armed"] .light{opacity:.82}
+.pad[data-dark="true"] [data-key] .light{opacity:0;animation:none}
+@keyframes soft{0%,100%{opacity:.66}50%{opacity:.86}}
+@keyframes breathe{0%,100%{opacity:.32}50%{opacity:1}}
+@keyframes blink{0%{opacity:.9}50%{opacity:.12}100%{opacity:.9}}
+
+/* dial: matte black cylinder with a slot across the top */
+.dial{position:relative;width:88%;aspect-ratio:1;border-radius:50%;cursor:grab;touch-action:none;outline-offset:5px;
+  background:radial-gradient(circle at 38% 30%,var(--blk-hi),var(--blk-lo) 72%);
+  box-shadow:0 8px 14px var(--shadow-deep),0 0 0 1px var(--well),inset 0 1px 0 var(--hilite),
+    0 7px 18px -5px color-mix(in srgb,var(--led-work) 34%,transparent);transition:transform .08s ease}
+.dial.is-down{transform:scale(.962)}
+.dial.dragging{cursor:grabbing}
+.dial-mark{position:absolute;inset:0;border-radius:50%;overflow:hidden;pointer-events:none;
+  transform:rotate(calc(var(--a,0deg) + 45deg));transition:transform .14s ease-out}
+.dial.dragging .dial-mark{transition:none}
+.dial-mark::after{content:"";position:absolute;left:50%;top:0;bottom:0;width:12%;transform:translateX(-50%);
+  background:linear-gradient(90deg,var(--well),var(--plate-lo) 58%,var(--well));box-shadow:1px 0 0 var(--hilite)}
+
+/* joystick: black cap on a square metal base */
+.stick{position:relative;width:82%;aspect-ratio:1;border-radius:9%;cursor:grab;touch-action:none;outline-offset:6px;
+  background:linear-gradient(150deg,var(--gate-hi),var(--gate-lo));box-shadow:inset 0 0 0 1px var(--hilite),0 2px 4px var(--shadow-deep)}
+.stick::before{content:"";position:absolute;inset:-4%;border-radius:10%;border:max(2px,.7cqw) dashed var(--gate-lo);pointer-events:none}
+.stick.dragging{cursor:grabbing}
+.stick-cap{position:absolute;left:50%;top:50%;width:76%;aspect-ratio:1;border-radius:50%;pointer-events:none;
+  transform:translate(calc(-50% + var(--x,0px)),calc(-50% + var(--y,0px)));
+  background:radial-gradient(circle at 38% 30%,var(--blk-hi),var(--blk-lo) 68%);
+  box-shadow:0 6px 9px var(--shadow-deep),inset 0 1px 0 var(--hilite);transition:transform .2s cubic-bezier(.3,1.5,.5,1)}
+.stick-cap svg{position:absolute;inset:0;width:100%;height:100%;stroke:var(--plate);stroke-width:5;stroke-linecap:round}
+.stick.dragging .stick-cap{transition:none}
+
+/* touch sensor + layer leds */
+.layer-leds{position:absolute;left:3%;top:50%;transform:translateY(-50%);display:grid;gap:1.3cqw}
+.layer-leds i{display:block;width:max(5px,1.7cqw);height:max(3px,1cqw);border-radius:1px;background:var(--led-off)}
+.layer-leds i.on{background:var(--led-idle);box-shadow:0 0 7px color-mix(in srgb,var(--led-idle) 70%,transparent)}
+.touch{position:absolute;right:5%;top:50%;transform:translateY(-50%);width:68%;aspect-ratio:1;border:0;padding:0;border-radius:50%;cursor:pointer;
+  display:grid;place-items:center;background:radial-gradient(circle at 50% 32%,var(--blk-hi),var(--blk-lo));
+  box-shadow:inset 0 0 0 1px var(--hilite),inset 0 2px 4px var(--shadow-deep)}
+.touch:active{background:var(--blk-lo)}
+.touch svg{width:46%;height:46%;fill:none;stroke:var(--silk);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+
+/* ---------- under the pad ---------- */
+.readouts{margin:0;display:grid;border-top:1px solid var(--line)}
+.ro{display:grid;grid-template-columns:5.2em minmax(0,1fr);gap:12px;align-items:center;padding:10px 2px;border-bottom:1px solid var(--line)}
+.ro dt{font:600 12px/1 var(--font-label);letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3)}
+.ro dd{margin:0;min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px}
+.ladder{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:4px;font:500 12.5px/1 var(--font-mono)}
+.ladder li{padding:5px 8px;border-radius:6px;color:var(--ink-3);border:1px solid transparent}
+.ladder li.set{color:var(--ink);border-color:var(--line-2);background:var(--raise)}
+.ro.open .ladder li.set{background:none;color:var(--ink-2)}
+.ro.open .ladder li.cursor{color:var(--desk);background:var(--steel);border-color:var(--steel)}
+.hint{font-size:13px;color:var(--ink-3)}
+.tagline{font:500 11px/1 var(--font-mono);color:var(--ink-3);border:1px solid var(--line-2);border-radius:4px;padding:3px 6px}
+.ro.flash{animation:flash .9s ease}
+@keyframes flash{0%{background:color-mix(in srgb,var(--steel) 16%,transparent)}100%{background:transparent}}
+.switch{position:relative;display:inline-flex;align-items:center;gap:9px;background:none;border:0;padding:2px;cursor:pointer;color:var(--ink-2);font-size:14px}
+.switch::before{content:"";width:34px;height:20px;border-radius:999px;background:var(--line-2);transition:background .15s}
+.switch::after{content:"";position:absolute;left:2px;width:14px;height:14px;border-radius:50%;background:var(--ink-3);transform:translateX(3px);transition:transform .15s,background .15s}
+.switch[aria-checked="true"]::before{background:color-mix(in srgb,var(--steel) 34%,var(--raise))}
+.switch[aria-checked="true"]::after{transform:translateX(17px);background:var(--ink)}
+.lights{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:8px 16px;font-size:13px;color:var(--ink-2)}
+.lights li{display:inline-flex;align-items:center;gap:7px}
+.note{margin:0;font-size:13px;color:var(--ink-3);max-width:60ch}
+.notice{margin:0;font-size:13px;color:var(--led-need)}
+.last{margin:0;min-height:2.9em;font:400 12.5px/1.45 var(--font-mono);color:var(--ink-2)}
+
+.dot{flex:none;width:9px;height:9px;border-radius:50%;background:var(--c);
+  box-shadow:0 0 8px color-mix(in srgb,var(--c) 65%,transparent)}
+[data-state="idle"]>.dot,.dot[data-state="idle"]{opacity:.38;box-shadow:none}
+[data-state="off"]>.dot,.dot[data-state="off"]{background:none;box-shadow:inset 0 0 0 1.5px var(--line-2)}
+[data-state="needs"]>.dot,.dot[data-state="needs"],[data-state="ask"]>.dot,.dot[data-state="ask"]{animation:breathe 1.8s ease-in-out infinite}
+[data-state="error"]>.dot,.dot[data-state="error"]{animation:blink 2.6s steps(1,end) infinite}
+
+/* ---------- agents ---------- */
+.agents{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--mat)}
+.agent{display:grid;grid-template-columns:10px minmax(0,.8fr) minmax(0,1.5fr) auto 52px;gap:4px 12px;align-items:center;
+  padding:10px 14px;border-top:1px solid var(--line)}
+.agent:first-child{border-top:0}
+.agent[data-state="needs"]{background:color-mix(in srgb,var(--led-need) 7%,var(--mat))}
+.agent[data-state="ask"]{background:color-mix(in srgb,var(--led-ask) 7%,var(--mat))}
+.who,.what{display:grid;gap:2px;min-width:0}
+.who strong{font-weight:600}
+.proj,.detail{font:400 12px/1.35 var(--font-mono);color:var(--ink-3);overflow-wrap:anywhere}
+.state{font-weight:500;color:var(--ink-2)}
+.agent[data-state="working"] .state{color:var(--ink)}
+.agent[data-state="needs"] .state{color:var(--led-need)}
+.agent[data-state="ask"] .state{color:var(--led-ask)}
+.agent[data-state="done"] .state{color:var(--led-done)}
+.agent[data-state="error"] .state{color:var(--led-err)}
+.since{font:400 12.5px/1 var(--font-mono);color:var(--ink-3);font-variant-numeric:tabular-nums}
+.mini{justify-self:end;font:500 12px/1 var(--font-body);padding:6px 8px;border-radius:6px;border:1px solid var(--line-2);background:none;color:var(--ink-3);cursor:pointer}
+.mini:hover{color:var(--ink);border-color:var(--ink-3)}
+@media (max-width:520px){
+  .agent{grid-template-columns:10px minmax(0,1fr) auto 52px}
+  .since{grid-column:3;grid-row:1}
+  .mini{grid-column:4;grid-row:1}
+  .what{grid-column:2 / -1;grid-row:2}
+}
+
+/* ---------- approval ---------- */
+.card{border:1px solid var(--line-2);border-radius:12px;background:var(--raise);padding:16px;display:grid;gap:12px;min-width:0}
+.card.empty{background:none;border-style:dashed;border-color:var(--line-2);color:var(--ink-3)}
+.card.empty p{margin:0}
+.card-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px}
+.card-head strong{font-weight:600}
+.tool{margin-left:auto;font:500 12px/1 var(--font-mono);border:1px solid var(--line-2);border-radius:5px;padding:4px 7px;color:var(--ink-2)}
+.cmd{margin:0;padding:11px 12px;border-radius:8px;background:var(--desk);border:1px solid var(--line);
+  font:400 13.5px/1.45 var(--font-mono);white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink);max-height:220px;overflow-y:auto}
+.where{font:400 12px/1.3 var(--font-mono);color:var(--ink-3);overflow-wrap:anywhere}
+.danger{margin:0;font-size:13.5px;color:var(--led-err);font-weight:500}
+.card-actions{display:flex;flex-wrap:wrap;gap:8px;position:relative;padding-bottom:10px}
+.card-actions::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;border-radius:2px;background:var(--line-2)}
+.card-actions.arming::after{background:var(--steel);transform-origin:left center;animation:arm 1s linear both;animation-delay:var(--el,0ms)}
+.card-actions.arming .btn.accept,.card-actions.arming .btn.deny{opacity:.5}
+@keyframes arm{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.card-foot{margin:0;font-size:13px;color:var(--ink-3)}
+
+.btn{font:500 14px/1 var(--font-body);color:var(--ink);background:var(--raise);border:1px solid var(--line-2);border-radius:8px;
+  padding:10px 14px;cursor:pointer;transition:background .12s,border-color .12s}
+.btn:hover{background:var(--line);border-color:var(--ink-3)}
+.btn.accept{background:var(--ink);color:var(--desk);border-color:var(--ink);font-weight:600}
+.btn.accept:hover{background:var(--steel);border-color:var(--steel)}
+.btn.deny{background:var(--desk)}
+.btn.ghost{background:none;border-color:transparent;color:var(--ink-2)}
+.btn.ghost:hover{border-color:var(--line-2);background:none;color:var(--ink)}
+
+/* ---------- test events ---------- */
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font:500 13.5px/1 var(--font-body);padding:8px 12px;border-radius:999px;border:1px solid var(--line-2);background:none;
+  color:var(--ink-2);cursor:pointer}
+.chip:hover{color:var(--ink);border-color:var(--ink-3)}
+.chip[aria-checked="true"]{background:var(--ink);border-color:var(--ink);color:var(--desk);font-weight:600}
+.events{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.ev{display:grid;gap:5px;text-align:left;padding:10px 12px;border-radius:9px;border:1px solid var(--line-2);background:var(--mat);cursor:pointer;min-width:0}
+.ev:hover{border-color:var(--ink-3);background:var(--raise)}
+.ev b{font-weight:500;font-size:14px}
+.ev code{font:400 11.5px/1.2 var(--font-mono);color:var(--ink-3);overflow-wrap:anywhere}
+@media (max-width:520px){.events{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* ---------- log ---------- */
+.log{list-style:none;margin:0;padding:4px 0;max-height:236px;overflow-y:auto;border:1px solid var(--line);border-radius:12px;background:var(--mat);
+  font:400 12.5px/1.5 var(--font-mono)}
+.log li{display:grid;grid-template-columns:auto 5ch minmax(0,1fr);gap:10px;padding:4px 14px;color:var(--ink-2)}
+.log li:first-child{color:var(--ink)}
+.log time,.log .tag{color:var(--ink-3);font-variant-numeric:tabular-nums}
+.log .msg{overflow-wrap:anywhere;min-width:0}
+.log .none{display:block;color:var(--ink-3)}
+
+@media (prefers-reduced-motion:reduce){
+  .light,.dot,.ro,.card-actions::after{animation:none !important}
+  .cap,.dial,.dial-mark,.stick-cap,.light{transition:none !important}
+}
+</style>
+</head>
+<body>
+<div class="bench">
+  <header class="top">
+    <div class="top-row">
+      <h1>Agent Pad</h1>
+      <span class="sim-chip" id="chip" data-live="false">Connecting…</span>
+    </div>
+    <p class="lede">Live view of your agents. Each key lights up from real session events. Click a key the way you would press it.</p>
+  </header>
+
+  <main class="stage">
+    <section class="deck" aria-label="Pad, seen from above">
+      <div class="pad-wrap">
+        <div class="pad" id="pad" data-dark="true" data-labels="true">
+          <div class="plate">
+            <span class="screw s1"></span><span class="screw s2"></span><span class="screw s3"></span><span class="screw s4"></span>
+            <span class="silk silk-top" aria-hidden="true">↑</span>
+            <span class="silk silk-left" aria-hidden="true">Virtual pad</span>
+            <span class="silk silk-right" aria-hidden="true">Live from hooks</span>
+            <span class="silk silk-bottom" aria-hidden="true">12 keys · dial · stick</span>
+
+            <div class="cell">
+              <div class="dial" id="dial" role="slider" tabindex="0" aria-label="Dial: reasoning effort" aria-valuemin="0" aria-valuemax="4" aria-valuenow="2" aria-valuetext="high">
+                <span class="dial-mark"></span>
+              </div>
+            </div>
+            <button class="key frost" type="button" data-key="gemini" data-state="off"><span class="cap"><span class="light"></span><span class="stem"></span><span class="legend">Gemini</span></span></button>
+            <button class="key frost" type="button" data-key="muse" data-state="off"><span class="cap"><span class="light"></span><span class="stem"></span><span class="legend">Muse</span></span></button>
+            <div class="cell">
+              <div class="stick" id="stick" role="group" tabindex="0" aria-label="Joystick: left and right switch sessions, up opens permission mode, down opens the model menu">
+                <span class="stick-cap"><svg viewBox="0 0 100 100" aria-hidden="true"><path d="M30 30l9 9M70 30l-9 9M30 70l9-9M70 70l-9-9"/></svg></span>
+              </div>
+            </div>
+
+            <button class="key frost" type="button" data-key="claude1" data-state="off"><span class="cap"><span class="light"></span><span class="stem"></span><span class="legend">Claude 1</span></span></button>
+            <button class="key frost" type="button" data-key="claude2" data-state="off"><span class="cap"><span class="light"></span><span class="stem"></span><span class="legend">Claude 2</span></span></button>
+            <button class="key frost" type="button" data-key="claude3" data-state="off"><span class="cap"><span class="light"></span><span class="stem"></span><span class="legend">Claude 3</span></span></button>
+            <button class="key frost" type="button" data-key="codex" data-state="off"><span class="cap"><span class="light"></span><span class="stem"></span><span class="legend">Codex</span></span></button>
+
+            <button class="key blk" type="button" data-key="newchat"><span class="cap"><span class="dish"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-6.5L8 20v-3.5H5a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2z"/><path d="M12 7.8v5.4M9.3 10.5h5.4"/></svg></span><span class="legend">New chat</span></span></button>
+            <button class="key blk" type="button" data-key="usage"><span class="cap"><span class="dish"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7.5" opacity=".35"/><path d="M12 4.5a7.5 7.5 0 0 1 7.5 7.5" stroke-width="2.4"/></svg></span><span class="legend">Usage</span></span></button>
+            <button class="key blk" type="button" data-key="copy"><span class="cap"><span class="dish"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="8.5" y="8.5" width="11.5" height="11.5" rx="2"/><path d="M15.5 8.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7.5a2 2 0 0 0 2 2h2.5"/></svg></span><span class="legend">Copy</span></span></button>
+            <button class="key blk" type="button" data-key="paste"><span class="cap"><span class="dish"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="15.5" rx="2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h3.5"/></svg></span><span class="legend">Paste</span></span></button>
+
+            <div class="cell">
+              <span class="layer-leds" id="layer-leds" aria-hidden="true"><i class="on"></i><i></i><i></i></span>
+              <button class="touch" type="button" id="touch" aria-label="Touch sensor: switch layer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4l8 4-8 4-8-4z"/><path d="M4 12l8 4 8-4M4 16l8 4 8-4"/></svg></button>
+            </div>
+            <button class="key wide frost" type="button" data-key="accept" data-state="off"><span class="cap"><span class="light"></span><span class="stem s-l"></span><span class="stem s-r"></span><span class="legend">Accept</span></span></button>
+            <button class="key blk" type="button" data-key="deny"><span class="cap"><span class="dish"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M9.2 9.2l5.6 5.6M14.8 9.2l-5.6 5.6"/></svg></span><span class="legend">Deny</span></span></button>
+          </div>
+        </div>
+      </div>
+
+      <p class="last" id="last" aria-live="polite">Click a key to see what it does.</p>
+
+      <p class="notice" id="pad-note" hidden></p>
+
+      <dl class="readouts">
+        <div class="ro" id="ro-effort">
+          <dt>Effort</dt>
+          <dd>
+            <ol class="ladder" id="ladder"><li>low</li><li>medium</li><li>high</li><li>xhigh</li><li>max</li></ol>
+            <span class="hint" id="effort-hint">Not reported yet</span>
+          </dd>
+        </div>
+        <div class="ro" id="ro-usage">
+          <dt>Usage</dt>
+          <dd><span class="hint">Not connected yet</span></dd>
+        </div>
+        <div class="ro">
+          <dt>Pad</dt>
+          <dd>
+            <button class="switch" type="button" role="switch" aria-checked="true" id="mute">Lights</button>
+            <button class="switch" type="button" role="switch" aria-checked="true" id="labels">Key labels</button>
+          </dd>
+        </div>
+      </dl>
+
+      <ul class="lights" aria-label="What each light means">
+        <li><span class="dot" data-state="working"></span>Working</li>
+        <li><span class="dot" data-state="needs"></span>Needs permission</li>
+        <li><span class="dot" data-state="ask"></span>Needs your reply</li>
+        <li><span class="dot" data-state="done"></span>Finished</li>
+        <li><span class="dot" data-state="idle"></span>Idle</li>
+        <li><span class="dot" data-state="error"></span>Error</li>
+        <li><span class="dot" data-state="off"></span>No events yet</li>
+      </ul>
+
+      <p class="note">New chat, Copy, Paste, the dial and the joystick send their shortcut to the Claude window. They never press Enter for you. Usage has no data source yet.</p>
+    </section>
+
+    <div class="console">
+      <section class="panel" aria-labelledby="h-agents">
+        <h2 id="h-agents">Agents</h2>
+        <ul class="agents" id="agents"></ul>
+        <p class="note" id="overflow" hidden></p>
+      </section>
+
+      <section class="panel" aria-labelledby="h-approval">
+        <div class="panel-head">
+          <h2 id="h-approval">Approval</h2>
+          <button class="switch" type="button" role="switch" aria-checked="false" id="frompad">Approve from the pad</button>
+        </div>
+        <div id="card" aria-live="polite"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-bench">
+        <h2 id="h-bench">Test events</h2>
+        <p class="note">Sends a made-up event to a key so you can try the pad without a real session. Test sessions are marked, and Clear removes them.</p>
+        <div class="chips" id="chips" role="radiogroup" aria-label="Key to send the test event to"></div>
+        <div class="events" id="events">
+          <button class="ev" type="button" data-ev="prompt"><b>Starts working</b><code>UserPromptSubmit</code></button>
+          <button class="ev" type="button" data-ev="permission"><b>Asks permission</b><code>PermissionRequest</code></button>
+          <button class="ev" type="button" data-ev="input"><b>Asks a question</b><code>Notification</code></button>
+          <button class="ev" type="button" data-ev="finish"><b>Finishes</b><code>Stop</code></button>
+          <button class="ev" type="button" data-ev="fail"><b>Fails</b><code>StopFailure</code></button>
+          <button class="ev" type="button" data-ev="end"><b>Session ends</b><code>SessionEnd</code></button>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-log">
+        <h2 id="h-log">Log</h2>
+        <ol class="log" id="log"></ol>
+      </section>
+    </div>
+  </main>
+</div>
+
+<script>
+(() => {
+'use strict';
+const TOKEN = '__AGENT_PAD_TOKEN__';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+const STEP = 30;
+const EFFORT = ['low', 'medium', 'high', 'xhigh', 'max'];
+const NAMES = { off: 'No events yet', idle: 'Idle', working: 'Working', done: 'Finished', error: 'Error' };
+
+let snap = null, live = false, skew = 0, cardSig = '', sim = 'claude1';
+const local = { layer: 1 };
+const SHORTCUT_KEYS = new Set(['newchat', 'copy', 'paste']);
+const act = id => api('/api/action', { id });
+
+function api(path, body) {
+  return fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+    body: JSON.stringify(body || {}),
+  }).catch(() => {});
+}
+const note = (tag, msg) => api('/api/note', { tag, msg });
+const shown = s => (s.state === 'needs' && s.kind === 'input' ? 'ask' : s.state);
+function label(s) {
+  if (s.state === 'needs') return s.guess ? 'May be waiting on you' : s.kind === 'permission' ? 'Needs permission' : 'Needs your reply';
+  return NAMES[s.state] || s.state;
+}
+function fmt(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = String(s % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
+}
+const age = since => fmt(Date.now() - skew - since);
+
+/* ---------- rendering ---------- */
+const pad = $('#pad');
+const keyEl = Object.fromEntries($$('[data-key]', pad).map(k => [k.dataset.key, k]));
+
+function renderChip() {
+  const chip = $('#chip');
+  chip.dataset.live = String(live);
+  chip.textContent = live ? 'Live · bridge connected' : (snap ? 'Bridge offline · lights paused' : 'Connecting…');
+}
+function renderPad() {
+  const muted = snap && snap.settings.muted;
+  pad.dataset.dark = String(!live || !snap || muted || local.layer !== 1);
+  $$('#layer-leds i').forEach((el, i) => el.classList.toggle('on', i === local.layer - 1));
+  const n = $('#pad-note');
+  const why = !snap ? '' : !live ? 'The bridge is not answering, so the lights are off until it is back.'
+    : local.layer !== 1 ? `Layer ${local.layer} is active. Status lights only show on layer 1.`
+    : muted ? 'Lights are muted. Alerts are still tracked in the list.' : '';
+  n.hidden = !why; n.textContent = why;
+  $('#mute').setAttribute('aria-checked', String(!muted));
+  if (!snap) return;
+  for (const s of snap.slots) {
+    const k = keyEl[s.id]; if (!k) continue;
+    k.dataset.state = shown(s);
+    k.setAttribute('aria-label', `${s.name}: ${label(s)}`);
+  }
+  const r = snap.request;
+  keyEl.accept.dataset.state = r && r.held ? (r.armedIn > 0 ? 'arming' : 'armed') : 'off';
+  keyEl.accept.setAttribute('aria-label', r && r.held ? `Accept the request from ${r.who}` : 'Accept: nothing to approve from the pad');
+  keyEl.deny.setAttribute('aria-label', r && r.held ? `Deny the request from ${r.who}` : 'Deny: nothing to answer from the pad');
+}
+function renderAgents() {
+  if (!snap) return;
+  $('#agents').innerHTML = snap.slots.map(s => {
+    const where = [s.folder || (s.state === 'off' ? 'not seen yet' : 'no session'), s.count > 1 ? `${s.count} sessions` : '', s.test ? 'test' : ''].filter(Boolean).join(' · ');
+    const detail = [s.detail, s.effort ? `effort ${s.effort}` : '', s.quiet ? 'quiet for a while' : ''].filter(Boolean).join(' · ');
+    return `<li class="agent" data-state="${esc(shown(s))}"><span class="dot"></span>
+      <div class="who"><strong>${esc(s.name)}</strong><span class="proj">${esc(where)}</span></div>
+      <div class="what"><span class="state">${esc(label(s))}</span><span class="detail">${esc(detail)}</span></div>
+      <time class="since" data-since="${s.since || ''}">${s.since ? age(s.since) : ''}</time>
+      ${s.count ? `<button class="mini" type="button" data-clear="${esc(s.id)}" aria-label="Clear ${esc(s.name)}">Clear</button>` : '<span></span>'}</li>`;
+  }).join('');
+  const o = $('#overflow');
+  o.hidden = !snap.overflow.length;
+  o.textContent = snap.overflow.length
+    ? `Not on a key: ${snap.overflow.map(x => `${x.name} (${label(x).toLowerCase()})`).join(', ')}. Every key for that tool is busy.`
+    : '';
+}
+function renderCard() {
+  if (!snap) return;
+  const r = snap.request, fromPad = snap.settings.fromPad;
+  $('#frompad').setAttribute('aria-checked', String(fromPad));
+  const armed = r && r.armedIn <= 0;
+  const sig = [r ? r.id : 'none', r && r.held, r && r.confirm, armed, snap.pending, fromPad, snap.others.join()].join('|');
+  if (sig === cardSig) return;
+  cardSig = sig;
+  const el = $('#card');
+  if (!r) {
+    el.innerHTML = `<div class="card empty"><p>${snap.pending > 1
+      ? `${snap.pending} requests are waiting. Press an amber key to choose one.`
+      : 'Nothing is waiting. When an agent asks permission, its key turns amber and the request shows here.'}</p></div>`;
+    return;
+  }
+  const also = snap.others.length ? `Also waiting: ${snap.others.join(', ')}.` : '';
+  let actions, foot;
+  if (r.held) {
+    actions = `<div class="card-actions${armed ? '' : ' arming'}" style="--el:-${Math.round(1000 - r.armedIn)}ms">
+      <button class="btn accept" type="button" data-act="accept">${r.confirm ? 'Confirm accept' : 'Accept'}</button>
+      <button class="btn deny" type="button" data-act="deny">Deny</button>
+      <button class="btn ghost" type="button" data-act="pass">Decide in the app</button>
+    </div>`;
+    foot = [armed ? 'You can also answer it in the app; whichever answer comes first counts.' : 'Accept and Deny unlock after 1 second.', also].filter(Boolean).join(' ');
+  } else {
+    actions = '';
+    foot = [fromPad ? 'Answer this one in the app.' : 'Approving from the pad is off, so answer this one in the app.', also].filter(Boolean).join(' ');
+  }
+  el.innerHTML = `<div class="card">
+    <div class="card-head"><span class="dot" data-state="needs"></span><span><strong>${esc(r.who)}</strong> wants to use</span><span class="tool">${esc(r.tool)}</span></div>
+    ${r.summary ? `<pre class="cmd">${esc(r.summary)}</pre>` : ''}
+    ${r.folder ? `<div class="where">in ${esc(r.folder)}</div>` : ''}
+    ${r.danger && r.held ? `<p class="danger">${esc(r.danger)}. ${r.confirm ? 'Press Accept again to confirm.' : 'Accept needs two presses.'}</p>` : ''}
+    ${r.danger && !r.held ? `<p class="danger">${esc(r.danger)}.</p>` : ''}
+    ${actions}
+    <p class="card-foot">${esc(foot)}</p>
+  </div>`;
+}
+function renderReadouts() {
+  const e = snap && snap.effort;
+  $$('#ladder li').forEach((li, i) => li.classList.toggle('set', !!e && EFFORT[i] === e.level));
+  $('#effort-hint').textContent = e
+    ? `Reported by ${e.who}. Press the dial to open the effort menu in Claude`
+    : 'Not reported yet. Press the dial to open the effort menu in Claude';
+  const at = e ? EFFORT.indexOf(e.level) : -1;
+  const dial = $('#dial'); dial.setAttribute('aria-valuenow', Math.max(0, at)); dial.setAttribute('aria-valuetext', e ? e.level : 'unknown');
+}
+function renderBench() {
+  if (!snap) return;
+  if (!snap.slots.some(s => s.id === sim)) sim = snap.slots[0].id;
+  const html = snap.slots.map(s =>
+    `<button class="chip" type="button" role="radio" aria-checked="${s.id === sim}" data-sim="${esc(s.id)}">${esc(s.name)}</button>`).join('');
+  const chips = $('#chips');
+  if (chips.dataset.sig !== sim + snap.slots.length) { chips.innerHTML = html; chips.dataset.sig = sim + snap.slots.length; }
+}
+function renderLog() {
+  if (!snap) return;
+  const lastPress = snap.log.find(e => e.tag !== 'EVENT');
+  $('#last').textContent = lastPress ? lastPress.msg : 'Click a key to see what it does.';
+  $('#log').innerHTML = snap.log.length ? snap.log.map(e =>
+    `<li><time>${new Date(e.t + skew).toLocaleTimeString([], { hour12: false })}</time><span class="tag">${esc(e.tag)}</span><span class="msg">${esc(e.msg)}</span></li>`).join('')
+    : '<li><span class="none">Nothing yet. Events from your sessions will show here.</span></li>';
+}
+function render() { renderChip(); renderPad(); renderAgents(); renderCard(); renderReadouts(); renderBench(); renderLog(); }
+
+/* ---------- live connection ---------- */
+function connect() {
+  const es = new EventSource('/events?token=' + TOKEN);
+  es.onmessage = e => {
+    try { snap = JSON.parse(e.data); } catch { return; }
+    skew = Date.now() - snap.now; live = true; render();
+  };
+  es.onerror = () => { if (live || !snap) { live = false; render(); } };
+}
+
+/* ---------- wiring ---------- */
+pad.addEventListener('click', e => {
+  const k = e.target.closest('[data-key]'); if (!k) return;
+  if (SHORTCUT_KEYS.has(k.dataset.key)) act(k.dataset.key); else api('/api/press', { key: k.dataset.key });
+  if (k.dataset.key === 'usage') { const ro = $('#ro-usage'); ro.classList.remove('flash'); void ro.offsetWidth; ro.classList.add('flash'); }
+});
+$('#card').addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b) api('/api/press', { key: b.dataset.act }); });
+$('#agents').addEventListener('click', e => { const b = e.target.closest('[data-clear]'); if (b) api('/api/clear', { slot: b.dataset.clear }); });
+$('#frompad').addEventListener('click', () => { if (snap) api('/api/setting', { name: 'fromPad', value: !snap.settings.fromPad }); });
+$('#mute').addEventListener('click', () => { if (snap) api('/api/setting', { name: 'muted', value: !snap.settings.muted }); });
+$('#labels').addEventListener('click', e => {
+  const on = pad.dataset.labels !== 'true';
+  pad.dataset.labels = String(on); e.currentTarget.setAttribute('aria-checked', String(on));
+});
+$('#chips').addEventListener('click', e => {
+  const c = e.target.closest('[data-sim]'); if (!c) return;
+  sim = c.dataset.sim; renderBench(); const again = $(`[data-sim="${sim}"]`); if (again) again.focus();
+});
+$('#events').addEventListener('click', e => { const b = e.target.closest('[data-ev]'); if (b) api('/api/simulate', { slot: sim, event: b.dataset.ev }); });
+$('#touch').addEventListener('click', () => {
+  local.layer = local.layer % 3 + 1;
+  note('PAD', local.layer === 1 ? 'Layer 1' : `Layer ${local.layer}: status lights hidden until layer 1`);
+  renderPad();
+});
+
+// The dial and joystick send real shortcuts to the Claude window. They never send Enter:
+// you pick the menu item yourself, so nothing here can confirm a prompt by accident.
+function dialPress() { act('dial-press'); }
+function dialTurn(dir) { act(dir > 0 ? 'dial-right' : 'dial-left'); }
+function stickPush(dir) { act('stick-' + dir); }
+
+/* dial: drag around it or scroll to turn, click to press */
+(() => {
+  const dial = $('#dial');
+  let angle = 0, last = null, acc = 0, start = null, moved = false, cx = 0, cy = 0, wheelAcc = 0;
+  const show = () => dial.style.setProperty('--a', angle + 'deg');
+  const flashDown = () => { dial.classList.add('is-down'); setTimeout(() => dial.classList.remove('is-down'), 110); };
+  dial.addEventListener('pointerdown', e => {
+    dial.setPointerCapture(e.pointerId);
+    const r = dial.getBoundingClientRect(); cx = r.left + r.width / 2; cy = r.top + r.height / 2;
+    last = Math.atan2(e.clientY - cy, e.clientX - cx); start = [e.clientX, e.clientY]; moved = false; acc = 0;
+    dial.classList.add('dragging');
+  });
+  dial.addEventListener('pointermove', e => {
+    if (last === null) return;
+    const a = Math.atan2(e.clientY - cy, e.clientX - cx);
+    let d = a - last; if (d > Math.PI) d -= 2 * Math.PI; if (d < -Math.PI) d += 2 * Math.PI;
+    last = a;
+    if (!moved && Math.hypot(e.clientX - start[0], e.clientY - start[1]) < 5) return;
+    moved = true;
+    const deg = d * 180 / Math.PI; angle += deg; acc += deg; show();
+    while (acc >= STEP) { acc -= STEP; dialTurn(1); }
+    while (acc <= -STEP) { acc += STEP; dialTurn(-1); }
+  });
+  dial.addEventListener('pointerup', () => {
+    if (last === null) return;
+    last = null; dial.classList.remove('dragging');
+    if (!moved) { flashDown(); dialPress(); } else { angle = Math.round(angle / STEP) * STEP; show(); }
+  });
+  dial.addEventListener('pointercancel', () => { last = null; dial.classList.remove('dragging'); });
+  dial.addEventListener('wheel', e => {
+    e.preventDefault(); wheelAcc += e.deltaY;
+    while (Math.abs(wheelAcc) >= 80) { const dir = wheelAcc > 0 ? 1 : -1; wheelAcc -= dir * 80; angle += dir * STEP; show(); dialTurn(dir); }
+  }, { passive: false });
+  dial.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowUp') { e.preventDefault(); angle += STEP; show(); dialTurn(1); }
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') { e.preventDefault(); angle -= STEP; show(); dialTurn(-1); }
+    else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flashDown(); dialPress(); }
+  });
+})();
+
+/* joystick: drag or click toward a direction, release to fire */
+(() => {
+  const stick = $('#stick');
+  let on = false, cx = 0, cy = 0, max = 0, dx = 0, dy = 0, size = 0;
+  const place = () => {
+    const dist = Math.hypot(dx, dy), k = dist > max ? max / dist : 1;
+    stick.style.setProperty('--x', dx * k + 'px'); stick.style.setProperty('--y', dy * k + 'px');
+  };
+  const home = () => { stick.style.setProperty('--x', '0px'); stick.style.setProperty('--y', '0px'); };
+  stick.addEventListener('pointerdown', e => {
+    stick.setPointerCapture(e.pointerId);
+    const r = stick.getBoundingClientRect(); size = r.width; cx = r.left + size / 2; cy = r.top + size / 2; max = size * 0.14;
+    on = true; dx = e.clientX - cx; dy = e.clientY - cy; stick.classList.add('dragging'); place();
+  });
+  stick.addEventListener('pointermove', e => { if (!on) return; dx = e.clientX - cx; dy = e.clientY - cy; place(); });
+  stick.addEventListener('pointerup', () => {
+    if (!on) return; on = false; stick.classList.remove('dragging'); home();
+    if (Math.hypot(dx, dy) < size * 0.15) { note('STICK', 'Centre press: no action assigned'); return; }
+    stickPush(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'));
+  });
+  stick.addEventListener('pointercancel', () => { on = false; stick.classList.remove('dragging'); home(); });
+  stick.addEventListener('keydown', e => {
+    const dir = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' }[e.key];
+    if (!dir) return;
+    e.preventDefault();
+    const r = stick.getBoundingClientRect().width * 0.14;
+    stick.style.setProperty('--x', (dir === 'left' ? -r : dir === 'right' ? r : 0) + 'px');
+    stick.style.setProperty('--y', (dir === 'up' ? -r : dir === 'down' ? r : 0) + 'px');
+    setTimeout(home, 130); stickPush(dir);
+  });
+})();
+
+/* clock: keep the "time in state" column ticking without rebuilding rows */
+setInterval(() => {
+  $$('#agents .since').forEach(t => { if (t.dataset.since) t.textContent = age(Number(t.dataset.since)); });
+}, 1000);
+
+render();
+connect();
+})();
+</script>
+</body>
+</html>

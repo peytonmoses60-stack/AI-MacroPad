@@ -1,0 +1,8 @@
+# Created on first start; local to each PC
+config.json
+data/
+
+# Leftovers from applying an update zip
+update-*/
+
+node_modules/

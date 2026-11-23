@@ -1,0 +1,111 @@
+# Agent Pad
+
+A virtual desk pad that lights up from your real Claude sessions. It is the test bench for the hardware pad: if the lights here are right, the same program can drive the real keys later.
+
+It has two parts. A small program on your PC (the "bridge") listens for events that Claude sends when a session starts working, asks permission, finishes or fails. A web page, served by that program, shows the pad.
+
+Everything stays on your computer. The bridge only listens on `127.0.0.1`, the page loads nothing from the internet, and prompts, replies and file contents never leave the hook helper.
+
+## Set it up (Windows)
+
+1. Install Node.js 20 or newer from nodejs.org if `node -v` does not work in a terminal.
+2. Unzip this folder somewhere permanent, for example `C:\agent-pad`. The hooks point at this location, so pick a spot and leave it there.
+3. Start the bridge by double-clicking `Start Agent Pad.cmd` in the folder. There is nothing to install first. (From a terminal, `npm start` does the same.)
+
+   Your browser opens the pad at `http://127.0.0.1:47600`. Leave that window open; closing it stops the pad.
+4. In a terminal in the folder, check the plumbing without Claude:
+
+   ```
+   node src/selftest.js
+   ```
+
+   A key should flash blue, then green, and you should see five `PASS` lines.
+5. Connect Claude:
+
+   ```
+   node src/install-hooks.js
+   ```
+
+   This adds hooks to `%USERPROFILE%\.claude\settings.json` and saves a backup of that file next to it first. Add `--print` to see what gets added without changing anything.
+6. Start a **new** session in Claude Desktop's Code tab. Sessions that were already open may not pick the hooks up.
+
+To undo step 5: `node src/install-hooks.js --uninstall`.
+
+## What each light means
+
+| When this happens in Claude | The key should |
+|---|---|
+| You send a prompt | Turn blue |
+| Claude asks permission for a tool | Turn amber and breathe, with the request shown on the page |
+| A tool that should be quick has not come back after 15 seconds | Turn amber, labelled "May be waiting on you". This is a guess, for prompts Claude does not report |
+| Claude asks you a question or shows a plan | Turn purple and breathe. Accept and Deny do nothing here; reply in Claude |
+| Claude finishes its turn | Turn green and stay green until you click the key |
+| A turn fails (for example a rate limit) | Blink red |
+| You close the session | Go dim |
+
+Write down any time a session was waiting on you and its key was not amber or purple. That is the number that decides whether the hardware is worth buying.
+
+## The keys
+
+- **Agent keys** bring that app's window forward and clear a finished or failed alert. They cannot pick a specific session inside Claude.
+- **New chat, Copy and Paste** bring the Claude window forward and send Ctrl+N, Ctrl+C or Ctrl+V to it.
+- **The dial** opens Claude's effort menu when pressed (Ctrl+Shift+E) and sends Up or Down when turned. The Effort row shows the level Claude last reported.
+- **The joystick** goes to the previous or next session (left, right), and opens the permission-mode menu (up) or the model menu (down).
+- **Accept and Deny** answer a permission request, but only when "Approve from the pad" is on.
+- **Usage** has no data source yet.
+
+Shortcuts work on Windows only, and they never press Enter or Space for you: you pick the menu item yourself, so a shortcut cannot confirm a prompt by accident. To change which key a shortcut sends, add a `shortcuts` entry to `config.json`, for example `"shortcuts": { "newchat": { "keys": "^t" } }` (`^` is Ctrl, `+` is Shift).
+
+### Approving from the pad
+
+This is off when you first run it, so nothing about approvals changes until you choose. Turn on **Approve from the pad** on the page to try it. Then, when a session asks permission:
+
+- The request appears on the page with the exact command.
+- Accept and Deny only work after the request has been on screen for one second.
+- Commands that look destructive need Accept pressed twice.
+- You can still answer in Claude as usual. Whichever answer comes first counts.
+- If the pad does not answer within two minutes, the request is left to Claude's own prompt.
+
+Questions, plan reviews and "may be waiting" guesses are never answered from the pad.
+
+## Which session goes on which key
+
+Each Claude session takes the first free Claude key and keeps it. A folder goes back to the key it used last time when that key is free. If all three keys are busy, an idle key is reused; otherwise the extra session is listed under the keys as "Not on a key".
+
+To pin a folder to a key, edit `config.json` (created on first start) and restart the bridge:
+
+```json
+{ "id": "claude2", "name": "Claude 2", "tool": "claude", "folders": ["C:\\dev\\storefront"] }
+```
+
+The Clear button next to a key resets it if a session crashed without saying goodbye.
+
+## When a light is wrong
+
+The bridge keeps a plain list of the events it received in `data\trace.log`: a time, the event name and the tool name, with no prompts, commands or file contents. If a key did not change when it should have, the trace shows whether Claude sent anything at that moment. Turn it off with `"trace": false` in `config.json`.
+
+The 15-second guess is set by `stall` in `config.json`. `seconds` is the default wait, `never` lists tools that are allowed to run long (terminal commands, subagents), and `perTool` sets a different wait for a named tool.
+
+## What is not done yet
+
+- **Codex, Gemini and Muse keys stay dark.** The bridge accepts their events (the helper takes the tool name as its first argument), but nothing installs hooks for them yet.
+- **Usage** has no data source.
+- **A terminal command waiting for permission** is only shown if Claude reports the request. Terminal commands are excluded from the 15-second guess because they often run long.
+
+## Files
+
+| Path | What it is |
+|---|---|
+| `src/server.js` | The bridge |
+| `src/state.js` | The rules that turn events into key states |
+| `src/hook.js` | The helper Claude runs for each event |
+| `src/keys.js`, `src/win-keys.ps1` | Shortcut keys and bringing windows forward (Windows) |
+| `src/install-hooks.js` | Adds or removes the hooks |
+| `public/index.html` | The pad page |
+| `Start Agent Pad.cmd` | Double-click to start the bridge on Windows |
+| `CLAUDE.md` | Instructions for a Claude session opened on this folder |
+| `docs/project-background.md` | The review findings and decisions behind the project |
+| `config.json` | Port, key names, pinned folders, shortcuts (created on first start) |
+| `data/` | Access token, saved key states, event trace (created on first start) |
+
+Run the automated checks with `node --test`.

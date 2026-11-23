@@ -3,6 +3,7 @@ config.json
 data/
 
 # Leftovers from applying an update zip
+update/
 update-*/
 
 node_modules/

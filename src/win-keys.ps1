@@ -35,7 +35,8 @@ function Confirm-Effort([IntPtr]$h) {
   $el = [System.Windows.Automation.AutomationElement]::FocusedElement
   if ($null -eq $el) { return 'unverified' }
   $name = [string]$el.Current.Name
-  if ($name -notmatch '^\s*(low|medium|high|x-?high|extra[ -]?high|max)\b') { return 'unverified' }
+  # Claude Desktop labels the level between High and Max just "Extra" (seen 23 Nov 2026).
+  if ($name -notmatch '^\s*(low|medium|high|x-?high|extra([ -]?high)?|max)\b') { return 'unverified' }
   $p = $null
   if ($el.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$p)) { $p.Invoke(); return 'confirmed' }
   if ($el.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$p)) { $p.Select(); return 'confirmed' }

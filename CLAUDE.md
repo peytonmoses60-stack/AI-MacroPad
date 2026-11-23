@@ -10,14 +10,14 @@ It has two parts: a bridge (`src/server.js`, a web server on `127.0.0.1:47600`) 
 |---|---|
 | `docs/ROADMAP.md` | **The plan.** What is confirmed, what is not, and what to do next, in order. Work from it and update it |
 | `README.md` | How the program works, for a person |
-| `docs/fable-review-and-portability-notes-2026-11-22.md` | Peyton's review notes: the product goal, guardrails and the portability requirement |
-| `docs/news-for-codex-2026-11-23.md` | What was seen on the Windows PC on the first day |
-| `docs/project-background.md` | The original research and decisions |
+| `CHANGELOG.md` | What each version added. The pad page shows the version it is running |
+| `docs/history/` | Dated background, already folded into the roadmap: Peyton's review notes (22 Nov), the first day on Windows (23 Nov), and the original research. Read only if you need the reasoning behind a decision |
 
 ## Where things stand (23 Nov 2026)
 
 - **Confirmed on Peyton's PC,** from his screenshots and screen recordings: the bridge runs, the hooks are installed, real Claude Desktop Code sessions turn their keys blue and green, the effort level comes through, permission requests (commands, tools and file edits) turn the key amber and show the request, and the stalled-tool fallback catches the built-in browser's site prompt after 15 seconds. On 23 Nov: Accept and Deny on the pad answered real requests, answering in Claude cleared the pad, New chat and the joystick worked, closing a session freed its key, and each Claude key jumps to its own session.
-- **Not yet confirmed on Windows:** the dial confirming effort is unreliable (V14); Copy and Paste, red and purple with real sessions, the two-minute timeout with a real session, alerts after a bridge restart, and showing app-owned prompts (V15). The full list is the Phase 1 table in the roadmap.
+- **The dial:** turning it changes effort with no press, confirmed on Windows for all five levels (V14) after Claude's "Extra" label was added on 23 Nov.
+- **Not yet confirmed on Windows:** Copy and Paste, red and purple with real sessions, the two-minute timeout with a real session, alerts after a bridge restart, and showing app-owned prompts (V15). The full list is the Phase 1 table in the roadmap.
 - **Jumping to a session:** pressing a Claude key asks the Claude app to show that key's session through `claude://resume?session=<id>`. Confirmed on Peyton's PC on 23 Nov 2026 with Claude Desktop 6.28899.6 (check V16 passed): each key switches to its own session, with no copy, including after a new session takes over the key. Re-run V16 after Claude updates. The link is undocumented and behaves differently on other Claude versions, so `jump.enabled` in `config.json` turns it off.
 - **Known limits:** the pad cannot answer prompts owned by the Desktop app, such as "Allow Claude to act on this site?" or "Allow Claude to use Notepad?". Those never reach the permission hook. The pad can read such a prompt off the Claude window and show it (written, never run on Windows; check V15), but it does not answer it.
 
@@ -28,6 +28,7 @@ It has two parts: a bridge (`src/server.js`, a web server on `127.0.0.1:47600`) 
 3. **Keep what works.** Do not remove or rewrite working behaviour. `node --test` must report no failures before and after your change, and every change comes with its own tests.
 4. **Report what you observed, not what you expected.** List each check as passed, failed or not tried. Paste the trace lines that show it, after checking them for folder names that should not go into git.
 5. **Update the roadmap** in the same change: the status table, the Phase 1 results, or the milestone you finished.
+6. **Raise the version with every change to the program.** Bump `version` in `package.json` and add an entry to `CHANGELOG.md`. The page shows that number, and it is how Peyton tells an old copy from a new one. Before building anything to hand to Peyton, fetch the branch first: another session may have pushed.
 
 ## Finding out what Claude sent
 

@@ -1,7 +1,7 @@
 # Agent Pad roadmap
 
 **Last updated:** 23 Nov 2026
-**Sources:** `docs/fable-review-and-portability-notes-2026-11-22.md` (the review notes), `docs/news-for-codex-2026-11-23.md` (what happened on the Windows PC), and the code as it stands.
+**Sources:** `docs/history/fable-review-and-portability-notes-2026-11-22.md` (the review notes), `docs/history/news-for-codex-2026-11-23.md` (what happened on the Windows PC), and the code as it stands.
 
 This is the single place that says what to do next and in what order. `CLAUDE.md` holds the rules; this file holds the plan. When you finish a milestone or learn something that changes a status, edit this file in the same change.
 
@@ -19,7 +19,7 @@ Large features wait for Peyton's go-ahead. Small, safety-tightening fixes (Phase
 - **The virtual pad** as the development and test bench. Real hardware is a second output, never a replacement.
 - **The hook helper's contract:** prints nothing unless the pad made an explicit decision, exits 0 on every failure.
 - **The hook installer** and its backup of Claude's settings.
-- **The tests.** All 47 stay green, and every milestone adds its own.
+- **The tests.** All of them stay green, and every milestone adds its own.
 - **Migrations are automatic and reversible.** When a file format or location changes, the old one is read, converted and kept as a backup.
 
 ## Assessment (23 Nov 2026)
@@ -28,7 +28,7 @@ This is the engineering assessment the review notes asked for.
 
 ### 1 to 3. What is confirmed, unverified, and missing
 
-"Confirmed" means seen in Peyton's screenshots of the live pad next to Claude Desktop on his Windows PC. Nothing in that column was run by an agent on Windows.
+"Confirmed" means seen on Peyton's Windows PC: in his screenshots and screen recordings of the live pad next to Claude Desktop, or in the pad's log and trace read by the Claude session running there. The Phase 1 table says which, check by check.
 
 | Capability | Status |
 |---|---|
@@ -60,8 +60,8 @@ One detail relies on inference: the "deny" decision the hook prints follows the 
 
 ### 4. Top three next steps
 
-1. **The remaining Phase 0 guardrail fixes.** Small code changes with tests, doable on any machine.
-2. **Phase 1 validation on the Windows PC,** starting with Accept/Deny and the shortcut keys. About half an hour with the trace open.
+1. **The remaining Phase 0 guardrail fixes** (M0.2 to M0.5). Small code changes with tests, doable on any machine.
+2. **The Phase 1 checks still open on the Windows PC:** showing an app-owned prompt (V15), alerts after a bridge restart (V11), a fourth session with real sessions (V12), Copy and Paste (V6), a long command (V13), and red and purple from real sessions (V9, V10).
 3. **Profile contract and config split** (M3.1 and M3.2). No behaviour change, and it is what unlocks the laptop.
 
 ### 5. Security and reliability concerns
@@ -145,8 +145,8 @@ Needs the PC. Record each as passed, failed or not tried, with the trace lines t
 | V12 | Four or more sessions: the fourth is listed as "not on a key" or takes an idle one | **Failed, 23 Nov, then fixed.** With all three keys green, a fourth session was listed as "no key", then asked a question and got a permission-prompt notification, and no key lit. Trace: `18:00:59.515Z PermissionRequest tool_name=AskUserQuestion`, `18:01:05.497Z Notification notification_type=permission_prompt`. Fixed by taking a key when a session needs you and giving a bumped session a key back when one goes idle (see the status table); re-check with real sessions |
 | V13 | A long terminal command (several minutes) stays blue and never shows as a guess | Not tried with several minutes. A simulated `PowerShell` tool left running for 16.5 s stayed blue while a quick tool turned amber after 15 s |
 | V14 | Turning the dial changes the effort level with no press, the log says "confirmed", and turning right raises it | **Passed for all five levels, 23 Nov.** Extra failed at first, then passed after the fix. From 12:52:56 to 12:53:06 local each turn logged "confirmed" and Claude's effort moved High, Low, Max, High to match. Peyton confirmed every level works except Extra. Cause: Claude's menu labels that level "Extra", and the check in `src/win-keys.ps1` only accepted "xhigh" or "extra high". It now accepts "Extra" too (`test/effort-labels.test.js`), and Peyton confirmed Extra works. The two failures at 12:39 are unexplained; several menus were being opened in quick succession then |
-| V16 | With two or more sessions on keys, pressing a Claude key switches Claude to that key's session, with no copy of the session appearing in the sidebar | **Passed, 23 Nov, Claude Desktop 6.28899.6.** The link passed by hand first. Then Peyton pressed Claude 1, 2 and 3 in turn from 13:53:56 to 13:54:11: Claude switched to each key's own session with no copy, and the pad logged no "Could not ask Claude to show that session" fallback. When a new session replaced the one on a key, the key opened the new session, not the old one. Re-run after each Claude update |
 | V15 | When Claude shows "Allow Claude to use ...?" or "Allow Claude to act on ...?", the key turns amber within a few seconds and the card shows that exact question, with Accept dark | Not tried |
+| V16 | With two or more sessions on keys, pressing a Claude key switches Claude to that key's session, with no copy of the session appearing in the sidebar | **Passed, 23 Nov, Claude Desktop 6.28899.6.** The link passed by hand first. Then Peyton pressed Claude 1, 2 and 3 in turn from 13:53:56 to 13:54:11: Claude switched to each key's own session with no copy, and the pad logged no "Could not ask Claude to show that session" fallback. When a new session replaced the one on a key, the key opened the new session, not the old one. Re-run after each Claude update |
 
 ## Phase 2: reliable attention
 

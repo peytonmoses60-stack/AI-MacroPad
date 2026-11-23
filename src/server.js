@@ -14,6 +14,11 @@ import { createKeySender, resolveActions, isSessionId } from './keys.js';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAX_BODY = 1024 * 1024;
 
+// The version in package.json, shown on the page so an out-of-date copy is easy to spot.
+export const VERSION = (() => {
+  try { return String(JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version || ''); } catch { return ''; }
+})();
+
 const DEFAULT_CONFIG = {
   port: 47600,
   approvals: { holdSeconds: 120 },
@@ -104,6 +109,7 @@ export async function start({ dataDir, configFile, port: portOverride, quiet = f
     settings: { holdSeconds: config.approvals.holdSeconds, quietMinutes: config.quietMinutes, stall: config.stall },
     saved: readJsonFile(stateFile, null),
   });
+  state.version = VERSION;
 
   // Shortcut keys and bringing windows forward (Windows only; elsewhere every request answers 'unsupported').
   const keys = keySender || createKeySender();
@@ -403,8 +409,8 @@ export async function start({ dataDir, configFile, port: portOverride, quiet = f
     server.closeAllConnections?.();
   });
 
-  if (!quiet) console.log(`Agent pad is running at http://127.0.0.1:${port}  (Ctrl+C to stop)`);
-  return { server, state, port, token, config, close, scanNow: scanForPrompt, url: `http://127.0.0.1:${port}` };
+  if (!quiet) console.log(`Agent Pad ${VERSION} is running at http://127.0.0.1:${port}  (Ctrl+C to stop)`);
+  return { server, state, port, token, config, version: VERSION, close, scanNow: scanForPrompt, url: `http://127.0.0.1:${port}` };
 }
 
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);

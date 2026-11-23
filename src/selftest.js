@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Checks the path a real hook takes, without needing Claude: runs the hook helper with sample events
-// and confirms the bridge picked them up. Start the bridge first (npm start), then run: npm run selftest
+// and confirms the bridge picked them up. Start the bridge first (Start Agent Pad.cmd, or node src/server.js), then run: node src/selftest.js
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -19,7 +19,7 @@ try {
   port = JSON.parse(fs.readFileSync(path.join(DATA, 'runtime.json'), 'utf8')).port;
   token = fs.readFileSync(path.join(DATA, 'token'), 'utf8').trim();
 } catch {
-  console.log('FAIL  The bridge has not been started yet. Run "npm start" in another window, then try again.');
+  console.log('FAIL  The bridge has not been started yet. Start it with "Start Agent Pad.cmd" (or "node src/server.js" in another window), then try again.');
   process.exit(1);
 }
 
@@ -36,7 +36,7 @@ const mine = snap => snap.slots.find(s => s.folder === 'selftest-project');
 const sessionId = `selftest-${Date.now()}`;
 
 try { await getState(); check(true, `Bridge is answering on port ${port}`); }
-catch { check(false, `Bridge is not answering on port ${port}. Is "npm start" still running?`); process.exit(1); }
+catch { check(false, `Bridge is not answering on port ${port}. Is the Agent Pad window still open?`); process.exit(1); }
 
 let r = sendEvent({ hook_event_name: 'UserPromptSubmit' });
 check(r.status === 0 && !r.stdout, 'Hook helper ran, stayed silent and exited cleanly');

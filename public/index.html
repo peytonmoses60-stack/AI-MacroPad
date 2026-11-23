@@ -37,6 +37,7 @@ button{font:inherit;color:inherit}
 /* ---------- header ---------- */
 .top{display:grid;gap:10px}
 .top-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px}
+.ver{font:400 12px/1.2 var(--font-mono);color:var(--ink-3)}
 h1{margin:0;font:600 clamp(26px,4vw,34px)/1.05 var(--font-label);letter-spacing:.05em;text-transform:uppercase}
 .sim-chip{display:inline-flex;align-items:center;gap:8px;font:500 12px/1 var(--font-mono);color:var(--ink-2);
   border:1px solid var(--line-2);border-radius:999px;padding:6px 11px}
@@ -293,6 +294,7 @@ h2{margin:0;font:600 12px/1 var(--font-label);letter-spacing:.16em;text-transfor
     <div class="top-row">
       <h1>Agent Pad</h1>
       <span class="sim-chip" id="chip" data-live="false">Connecting…</span>
+      <span class="ver" id="ver" title="The version of Agent Pad this page is talking to. CHANGELOG.md lists what each version added."></span>
     </div>
     <p class="lede">Live view of your agents. Each key lights up from real session events. Click a key the way you would press it.</p>
   </header>
@@ -460,6 +462,7 @@ function renderChip() {
   const chip = $('#chip');
   chip.dataset.live = String(live);
   chip.textContent = live ? 'Live · bridge connected' : (snap ? 'Bridge offline · lights paused' : 'Connecting…');
+  $('#ver').textContent = snap && snap.version ? `Version ${snap.version}` : '';
 }
 function renderPad() {
   const muted = snap && snap.settings.muted;

@@ -80,6 +80,7 @@ export class PadState {
     this.settings = { muted: false, fromPad: true, holdSeconds: 120, quietMinutes: 30, ...rest };
     this.stall = { ...DEFAULT_STALL, ...(stall || {}) };
     this.stallSig = '';
+    this.version = ''; // the program's version, set by the bridge and shown on the page
     this.present = false;
     this.screen = null;        // a prompt read off the app's own window, for display only: { key, question, detail }
     this.memory = { bySession: {}, byFolder: {}, toolsSeen: [] };
@@ -681,6 +682,7 @@ export class PadState {
       .map(r => { const s = this.sessions.get(r.key); return s ? this.titleOf(s) : 'a closed session'; });
     return {
       now: t,
+      version: this.version,
       settings: { muted: this.settings.muted, fromPad: this.settings.fromPad, holdSeconds: this.settings.holdSeconds },
       slots, overflow, request, others, pending: this.requests.size, effort,
       log: this.log,

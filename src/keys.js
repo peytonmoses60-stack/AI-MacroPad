@@ -24,6 +24,8 @@ export const ACTIONS = {
   'stick-down': { app: 'claude', keys: '^+i', label: 'Joystick down: model menu (Ctrl+Shift+I)' },
 };
 
+const MODES = new Set(['confirm-effort']);
+
 // One key, optionally with Ctrl and/or Shift. No Enter, no Space, no Alt, no sequences.
 const ONE_KEY = /^[\^+]{0,2}(\{(TAB|UP|DOWN|LEFT|RIGHT|ESC|HOME|END|PGUP|PGDN|F([1-9]|1[0-2]))\}|[a-z0-9,.\/\[\]\-=;'])$/i;
 export function safeKeys(keys) {
@@ -46,6 +48,8 @@ export function resolveActions(overrides = {}) {
 
 // Keeps one PowerShell process open so each key press is quick.
 // run(title, keys) resolves to: 'sent', 'focused' (no keys asked for), 'nofocus', 'refused', 'unsupported' or 'error'.
+// run(title, '', 'confirm-effort') presses the highlighted menu item, but only if the helper can see that it is
+// an effort level. It resolves to 'confirmed' or 'unverified', and never falls back to a keystroke.
 export function createKeySender({ platform = process.platform, spawnFn = spawn, timeoutMs = 6000 } = {}) {
   if (platform !== 'win32') {
     return { supported: false, run: async () => 'unsupported', warm() {}, stop() {} };
@@ -83,14 +87,15 @@ export function createKeySender({ platform = process.platform, spawnFn = spawn, 
     return c;
   }
 
-  function run(title, keys = '') {
+  function run(title, keys = '', mode = '') {
     if (!title) return Promise.resolve('nofocus');
     if (keys && !safeKeys(keys)) return Promise.resolve('refused');
+    if (mode && !MODES.has(mode)) return Promise.resolve('refused');
     return new Promise(resolve => {
       const id = String(++seq);
       const timer = setTimeout(() => settle(id, 'error'), timeoutMs);
       waiting.set(id, { resolve, timer });
-      try { ensure().stdin.write(`${id}\t${String(title).replace(/[\t\r\n]/g, ' ')}\t${keys}\n`); }
+      try { ensure().stdin.write(`${id}\t${String(title).replace(/[\t\r\n]/g, ' ')}\t${keys}${mode ? `\t${mode}` : ''}\n`); }
       catch { settle(id, 'error'); }
     });
   }

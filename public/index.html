@@ -376,7 +376,7 @@ h2{margin:0;font:600 12px/1 var(--font-label);letter-spacing:.16em;text-transfor
         <li><span class="dot" data-state="off"></span>No events yet</li>
       </ul>
 
-      <p class="note">New chat, Copy, Paste, the dial and the joystick send their shortcut to the Claude window. They never press Enter for you. Usage has no data source yet.</p>
+      <p class="note">New chat, Copy, Paste, the dial and the joystick send their shortcut to the Claude window. Turning the dial changes effort; no press is needed. Nothing here ever sends Enter. Usage has no data source yet.</p>
     </section>
 
     <div class="console">
@@ -541,8 +541,8 @@ function renderReadouts() {
   const e = snap && snap.effort;
   $$('#ladder li').forEach((li, i) => li.classList.toggle('set', !!e && EFFORT[i] === e.level));
   $('#effort-hint').textContent = e
-    ? `Reported by ${e.who}. Press the dial to open the effort menu in Claude`
-    : 'Not reported yet. Press the dial to open the effort menu in Claude';
+    ? `Reported by ${e.who}. Turn the dial to change it`
+    : 'Not reported yet. Turn the dial to change it';
   const at = e ? EFFORT.indexOf(e.level) : -1;
   const dial = $('#dial'); dial.setAttribute('aria-valuenow', Math.max(0, at)); dial.setAttribute('aria-valuetext', e ? e.level : 'unknown');
 }
@@ -599,8 +599,9 @@ $('#touch').addEventListener('click', () => {
   renderPad();
 });
 
-// The dial and joystick send real shortcuts to the Claude window. They never send Enter:
-// you pick the menu item yourself, so nothing here can confirm a prompt by accident.
+// The dial and joystick send real shortcuts to the Claude window. They never send Enter.
+// Turning the dial is the whole gesture: the bridge opens the effort menu, moves, and confirms
+// the highlighted level only after checking that it really is an effort level.
 function dialPress() { act('dial-press'); }
 function dialTurn(dir) { act(dir > 0 ? 'dial-right' : 'dial-left'); }
 function stickPush(dir) { act('stick-' + dir); }

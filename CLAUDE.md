@@ -42,7 +42,7 @@ Shortcut keys and bringing a window forward go through one PowerShell process, `
 ## Rules
 
 - **Approvals go only through the `PermissionRequest` hook decision.** Never approve by sending input to a window: not Enter, not Space, not Ctrl+Enter, not a click at a screen position. If no verified channel exists for a prompt, do nothing and point Peyton to Claude.
-- **No shortcut may ever send Enter or Space.** Either could confirm a prompt that has focus. `safeKeys` in `src/keys.js` enforces this and a test covers it. Do not loosen it, and do not add an action that confirms a menu.
+- **No shortcut may ever send Enter or Space.** Either could confirm a prompt that has focus. `safeKeys` in `src/keys.js` enforces this and a test covers it. Do not loosen it. The one thing that confirms a menu is the effort dial, at Peyton's request, and it does so without a keystroke: the helper presses the focused item through UI Automation only after checking that its name is an effort level, and confirms nothing if it cannot check. Do not add any other confirming action.
 - **A guess is never approvable.** A stalled-tool guess, a question, a plan review, or a prompt owned by the Desktop app must not light Accept unless the exact prompt has been positively identified (roadmap M2.6).
 - **Accept and Deny act on one specific, visible request**, after one second on screen, with two presses for commands that look destructive. That detection is a hint, not protection; do not describe it as more.
 - **"Approve from the pad" defaults on, by Peyton's decision on 23 Nov 2026.** Do not change the default in either direction. It only lets a deliberate press answer a request; nothing may ever approve without one, and requests are held only while a pad is open.

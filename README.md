@@ -49,12 +49,14 @@ Write down any time a session was waiting on you and its key was not amber or pu
 
 - **Agent keys** bring that app's window forward and clear a finished or failed alert. They cannot pick a specific session inside Claude.
 - **New chat, Copy and Paste** bring the Claude window forward and send Ctrl+N, Ctrl+C or Ctrl+V to it.
-- **The dial** opens Claude's effort menu when pressed (Ctrl+Shift+E) and sends Up or Down when turned. The Effort row shows the level Claude last reported.
+- **The dial** changes Claude's effort level when you turn it. No press is needed: the bridge opens the effort menu, moves the highlight, and confirms once the dial rests. The Effort row shows the level Claude last reported, so it updates on Claude's next event.
+  - Confirming is done by pressing that one menu item through Windows accessibility, and only after checking that the highlighted item is an effort level. If the bridge cannot check, it confirms nothing, leaves the menu open, and the line under the pad tells you to pick it in Claude.
+  - Set `"dial": { "autoConfirm": false }` in `config.json` to always confirm yourself.
 - **The joystick** goes to the previous or next session (left, right), and opens the permission-mode menu (up) or the model menu (down).
 - **Accept and Deny** answer a permission request, but only when "Approve from the pad" is on.
 - **Usage** has no data source yet.
 
-Shortcuts work on Windows only, and they never press Enter or Space for you: you pick the menu item yourself, so a shortcut cannot confirm a prompt by accident. To change which key a shortcut sends, add a `shortcuts` entry to `config.json`, for example `"shortcuts": { "newchat": { "keys": "^t" } }` (`^` is Ctrl, `+` is Shift).
+Shortcuts work on Windows only, and they never press Enter or Space, so a shortcut cannot confirm a prompt by accident. To change which key a shortcut sends, add a `shortcuts` entry to `config.json`, for example `"shortcuts": { "newchat": { "keys": "^t" } }` (`^` is Ctrl, `+` is Shift).
 
 ### Approving from the pad
 

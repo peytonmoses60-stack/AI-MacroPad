@@ -41,6 +41,7 @@ This is the engineering assessment the review notes asked for.
 | Updater applied update 2 over the first install | **Confirmed on Windows** |
 | Accept and Deny round trip through the hook; timeout; answering in Claude instead | Implemented, unverified on Windows |
 | Shortcut keys, dial, joystick, and bringing the Claude window forward (`src/win-keys.ps1`) | Implemented, unverified on Windows |
+| Turning the dial changes effort with no press | Implemented, unverified on Windows. It depends on Claude exposing its effort menu to Windows accessibility; if it does not, the dial moves the highlight and Peyton confirms in Claude |
 | File-edit permission prompt | Implemented, unverified on Windows |
 | Failed turn (red), session end (dim), question or plan review (purple) | Implemented, unverified on Windows |
 | State restored after a bridge restart; behaviour with more than three sessions | Implemented, unverified on Windows |
@@ -88,6 +89,7 @@ These are binding. The first group is enforced in code today. The second group i
 
 - Approvals go only through the permission hook's decision. No keystroke ever approves anything.
 - No shortcut can send Enter or Space (`safeKeys`, with a test).
+- The effort dial confirms a menu item only through UI Automation, and only after checking that the focused item is an effort level. If it cannot check, it confirms nothing.
 - Accept and Deny wait one second after a request appears, and Accept needs two presses on a command that looks destructive.
 - Questions, plan reviews and guessed waits never light Accept.
 - A stopped or broken bridge never blocks or changes what Claude does.
@@ -138,6 +140,7 @@ Needs the PC. Record each as passed, failed or not tried, with the trace lines t
 | V11 | After restarting the bridge, alerts come back and nothing is held | Not tried |
 | V12 | Four or more sessions: the fourth is listed as "not on a key" or takes an idle one | Not tried |
 | V13 | A long terminal command (several minutes) stays blue and never shows as a guess | Not tried |
+| V14 | Turning the dial changes the effort level with no press, the log says "confirmed", and turning right raises it | Not tried |
 
 ## Phase 2: reliable attention
 
@@ -204,6 +207,7 @@ Nothing here is bought on assumption. M6.1 costs nothing.
 
 - **"Approve from the pad" defaults on.** This replaces the notes' "default off, reset on every start".
 - **Incognito is out.** The pad has 12 keys and the key map is final on that point.
+- **The dial changes effort by turning alone,** as on the real pad. No press to open the menu or to confirm.
 - **Gemini** is the Gemini desktop app for Windows, on the Google AI Pro plan.
 - **Muse** is the free version in the browser. A desktop app would be welcome if one ships for Windows.
 - **Both computers run Windows.** The operating-system layer stays Windows-only for now.

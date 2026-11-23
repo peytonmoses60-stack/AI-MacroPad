@@ -17,6 +17,9 @@ const MAX_BODY = 1024 * 1024;
 const DEFAULT_CONFIG = {
   port: 47600,
   approvals: { holdSeconds: 120 },
+  // openMs: how long the effort menu is assumed to stay open after the dial last touched it.
+  // settleMs: how long the dial must rest before the highlighted level is confirmed.
+  dial: { autoConfirm: true, openMs: 4000, settleMs: 700 },
   quietMinutes: 30,
   focusOnPress: true,
   windowTitles: { claude: 'Claude', codex: 'Codex', gemini: '', muse: '' },
@@ -53,6 +56,7 @@ export function loadConfig(file) {
   return {
     ...DEFAULT_CONFIG, ...found,
     approvals: { ...DEFAULT_CONFIG.approvals, ...(found.approvals || {}) },
+    dial: { ...DEFAULT_CONFIG.dial, ...(found.dial || {}) },
     windowTitles: { ...DEFAULT_CONFIG.windowTitles, ...(found.windowTitles || {}) },
     stall: { ...DEFAULT_STALL, ...(found.stall || {}) },
     shortcuts: found.shortcuts && typeof found.shortcuts === 'object' ? found.shortcuts : {},
@@ -97,6 +101,46 @@ export async function start({ dataDir, configFile, port: portOverride, quiet = f
   const keys = keySender || createKeySender();
   const actions = resolveActions(config.shortcuts);
   keys.warm?.();
+
+  // The dial. Turning it is the whole gesture: the bridge opens Claude's effort menu if it is not
+  // already open, moves the highlight, and once the dial rests, confirms the highlighted level.
+  // Confirming is done by the helper pressing that one menu item after checking it is an effort level.
+  // If it cannot check, nothing is confirmed and the menu is left open for Peyton to pick from.
+  const dial = { openUntil: 0, moved: 0, timer: null, chain: Promise.resolve() };
+  function dialTurn(dir) {
+    const title = config.windowTitles.claude;
+    dial.chain = dial.chain.then(async () => {
+      let outcome = 'sent';
+      if (Date.now() > dial.openUntil) outcome = await keys.run(title, actions['dial-press'].keys);
+      if (outcome === 'sent') outcome = await keys.run(title, actions[dir > 0 ? 'dial-right' : 'dial-left'].keys);
+      if (outcome !== 'sent') {
+        dial.openUntil = 0;
+        state.note('DIAL', `Effort dial: ${outcome === 'unsupported' ? 'shortcuts only work on Windows' : outcome === 'nofocus' ? `could not bring the ${title} window forward` : 'failed'}`);
+        return;
+      }
+      dial.openUntil = Date.now() + config.dial.openMs;
+      dial.moved += dir;
+      clearTimeout(dial.timer);
+      dial.timer = setTimeout(dialSettle, config.dial.settleMs);
+      dial.timer.unref();
+    }).catch(() => {});
+  }
+  function dialSettle() {
+    dial.chain = dial.chain.then(async () => {
+      const steps = dial.moved; dial.moved = 0;
+      const moved = `${Math.abs(steps)} step${Math.abs(steps) === 1 ? '' : 's'} ${steps >= 0 ? 'up' : 'down'}`;
+      if (!config.dial.autoConfirm) { state.note('DIAL', `Effort dial: moved ${moved}. Pick it in Claude to confirm`); return; }
+      const outcome = await keys.run(config.windowTitles.claude, '', 'confirm-effort');
+      if (outcome === 'confirmed') {
+        dial.openUntil = 0;
+        state.note('DIAL', `Effort dial: moved ${moved} and confirmed`);
+      } else {
+        // The menu is still open with the new level highlighted. Assume it stays open a while longer.
+        dial.openUntil = Date.now() + config.dial.openMs * 4;
+        state.note('DIAL', `Effort dial: moved ${moved}, but could not confirm it for you. Pick it in Claude`);
+      }
+    }).catch(() => {});
+  }
 
   // A plain list of which events arrived, for working out what an app does and does not report.
   // Event and tool names only: no prompts, commands or file contents.
@@ -258,6 +302,11 @@ export async function start({ dataDir, configFile, port: portOverride, quiet = f
         case '/api/action': {
           const act = actions[String(body.id || '')];
           if (!act) return send(res, 400, { error: 'unknown action' });
+          if (body.id === 'dial-left' || body.id === 'dial-right') {
+            dialTurn(body.id === 'dial-right' ? 1 : -1);
+            return send(res, 200, { ok: true });
+          }
+          if (body.id === 'dial-press') dial.openUntil = Date.now() + config.dial.openMs;
           keys.run(config.windowTitles[act.app], act.keys).then(outcome => {
             const tail = {
               sent: '', focused: '',
@@ -307,7 +356,7 @@ export async function start({ dataDir, configFile, port: portOverride, quiet = f
   const ticker = setInterval(() => state.tick(), 1000); ticker.unref();
 
   const close = () => new Promise(resolve => {
-    clearInterval(ping); clearInterval(sweeper); clearInterval(ticker); clearTimeout(goneTimer);
+    clearInterval(ping); clearInterval(sweeper); clearInterval(ticker); clearTimeout(goneTimer); clearTimeout(dial.timer);
     keys.stop?.();
     for (const r of [...state.requests.values()]) state.release(r.id);
     saveNow();

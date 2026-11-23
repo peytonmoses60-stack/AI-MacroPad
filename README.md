@@ -73,6 +73,18 @@ When a session asks permission:
 
 Questions, plan reviews and "may be waiting" guesses are never answered from the pad.
 
+### Prompts that belong to the Claude app
+
+Some prompts are not sent to the pad at all. When Claude wants to open a website or use another program, the Claude app asks you in its own window ("Allow Claude to act on this site?", "Allow Claude to use Notepad?"). The pad only hears that a tool started. That is why such a wait shows as a guess after 15 seconds, and why Accept and Deny stay dark: there is no request for them to answer.
+
+On Windows the bridge now looks for these so it can at least tell you what is being asked:
+
+- A few seconds after a quick tool has not come back, it reads the Claude window through Windows accessibility, looking for one question starting "Allow Claude to" with a Deny and an Allow button.
+- If it finds exactly that, the key turns amber straight away and the card shows the question word for word, marked as read from the Claude window.
+- If two sessions are waiting at once, or it cannot read one clear question, it shows nothing extra and the 15-second guess still applies.
+
+The pad does not answer these prompts. They are Claude's own safeguards, and you answer them in Claude. Turn the reading off with `"screenPrompts": { "enabled": false }` in `config.json`.
+
 ## Which session goes on which key
 
 Each Claude session takes the first free Claude key and keeps it. A folder goes back to the key it used last time when that key is free. If all three keys are busy, an idle key is reused; otherwise the extra session is listed under the keys as "Not on a key".

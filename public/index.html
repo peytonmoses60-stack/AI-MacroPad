@@ -504,7 +504,7 @@ function renderCard() {
   const r = snap.request, fromPad = snap.settings.fromPad;
   $('#frompad').setAttribute('aria-checked', String(fromPad));
   const armed = r && r.armedIn <= 0;
-  const sig = [r ? r.id : 'none', r && r.held, r && r.confirm, armed, snap.pending, fromPad, snap.others.join()].join('|');
+  const sig = [r ? r.id : 'none', r && r.summary, r && r.held, r && r.confirm, armed, snap.pending, fromPad, snap.others.join()].join('|');
   if (sig === cardSig) return;
   cardSig = sig;
   const el = $('#card');
@@ -525,10 +525,12 @@ function renderCard() {
     foot = [armed ? 'You can also answer it in the app; whichever answer comes first counts.' : 'Accept and Deny unlock after 1 second.', also].filter(Boolean).join(' ');
   } else {
     actions = '';
-    foot = [fromPad ? 'Answer this one in the app.' : 'Approving from the pad is off, so answer this one in the app.', also].filter(Boolean).join(' ');
+    foot = [r.source === 'screen'
+      ? 'Read from the Claude window. This prompt belongs to the Claude app, so the pad cannot answer it. Answer it in Claude.'
+      : fromPad ? 'Answer this one in the app.' : 'Approving from the pad is off, so answer this one in the app.', also].filter(Boolean).join(' ');
   }
   el.innerHTML = `<div class="card">
-    <div class="card-head"><span class="dot" data-state="needs"></span><span><strong>${esc(r.who)}</strong> wants to use</span><span class="tool">${esc(r.tool)}</span></div>
+    <div class="card-head"><span class="dot" data-state="needs"></span><span><strong>${esc(r.who)}</strong> ${r.source === 'screen' ? 'is asking in the Claude window' : 'wants to use'}</span><span class="tool">${esc(r.tool)}</span></div>
     ${r.summary ? `<pre class="cmd">${esc(r.summary)}</pre>` : ''}
     ${r.folder ? `<div class="where">in ${esc(r.folder)}</div>` : ''}
     ${r.danger && r.held ? `<p class="danger">${esc(r.danger)}. ${r.confirm ? 'Press Accept again to confirm.' : 'Accept needs two presses.'}</p>` : ''}

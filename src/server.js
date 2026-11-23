@@ -20,6 +20,9 @@ const DEFAULT_CONFIG = {
   // openMs: how long the effort menu is assumed to stay open after the dial last touched it.
   // settleMs: how long the dial must rest before the highlighted level is confirmed.
   dial: { autoConfirm: true, openMs: 4000, settleMs: 700 },
+  // Reading prompts off the app's own window (Windows only). afterMs: how long a quick tool must be
+  // out before looking. everyMs: how often to look again while it stays out.
+  screenPrompts: { enabled: true, afterMs: 3000, everyMs: 2500 },
   quietMinutes: 30,
   focusOnPress: true,
   windowTitles: { claude: 'Claude', codex: 'Codex', gemini: '', muse: '' },
@@ -57,6 +60,7 @@ export function loadConfig(file) {
     ...DEFAULT_CONFIG, ...found,
     approvals: { ...DEFAULT_CONFIG.approvals, ...(found.approvals || {}) },
     dial: { ...DEFAULT_CONFIG.dial, ...(found.dial || {}) },
+    screenPrompts: { ...DEFAULT_CONFIG.screenPrompts, ...(found.screenPrompts || {}) },
     windowTitles: { ...DEFAULT_CONFIG.windowTitles, ...(found.windowTitles || {}) },
     stall: { ...DEFAULT_STALL, ...(found.stall || {}) },
     shortcuts: found.shortcuts && typeof found.shortcuts === 'object' ? found.shortcuts : {},
@@ -140,6 +144,27 @@ export async function start({ dataDir, configFile, port: portOverride, quiet = f
         state.note('DIAL', `Effort dial: moved ${moved}, but could not confirm it for you. Pick it in Claude`);
       }
     }).catch(() => {});
+  }
+
+  // Prompts that belong to the app. When exactly one session has a quick tool that has not come back,
+  // look in the app's window for a prompt. If one is there, the pad turns the key amber straight away
+  // and shows its exact question. It is display only: the pad never answers these prompts.
+  const scan = { busy: false, last: 0 };
+  async function scanForPrompt() {
+    if (scan.busy || !keys.ask || !config.screenPrompts.enabled) return;
+    const candidates = state.scanCandidates(config.screenPrompts.afterMs);
+    if (candidates.length !== 1) { state.clearScreenPrompt(); return; }
+    if (Date.now() - scan.last < config.screenPrompts.everyMs) return;
+    const key = candidates[0];
+    const title = config.windowTitles[key.split(':')[0]];
+    if (!title) return;
+    scan.busy = true; scan.last = Date.now();
+    try {
+      const r = await keys.ask(title, 'find-prompt');
+      const still = state.scanCandidates(config.screenPrompts.afterMs);
+      if (r.status === 'found' && still.length === 1 && still[0] === key) state.setScreenPrompt(key, r.fields[0], r.fields[1]);
+      else if (r.status !== 'found') state.clearScreenPrompt();
+    } catch { /* looking is best effort */ } finally { scan.busy = false; }
   }
 
   // A plain list of which events arrived, for working out what an app does and does not report.
@@ -353,7 +378,7 @@ export async function start({ dataDir, configFile, port: portOverride, quiet = f
 
   const ping = setInterval(() => { for (const c of clients) c.write(': ping\n\n'); }, 20000); ping.unref();
   const sweeper = setInterval(() => state.sweep(), 3600 * 1000); sweeper.unref();
-  const ticker = setInterval(() => state.tick(), 1000); ticker.unref();
+  const ticker = setInterval(() => { state.tick(); scanForPrompt(); }, 1000); ticker.unref();
 
   const close = () => new Promise(resolve => {
     clearInterval(ping); clearInterval(sweeper); clearInterval(ticker); clearTimeout(goneTimer); clearTimeout(dial.timer);
@@ -366,7 +391,7 @@ export async function start({ dataDir, configFile, port: portOverride, quiet = f
   });
 
   if (!quiet) console.log(`Agent pad is running at http://127.0.0.1:${port}  (Ctrl+C to stop)`);
-  return { server, state, port, token, config, close, url: `http://127.0.0.1:${port}` };
+  return { server, state, port, token, config, close, scanNow: scanForPrompt, url: `http://127.0.0.1:${port}` };
 }
 
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);

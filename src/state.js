@@ -81,6 +81,7 @@ export class PadState {
     this.stall = { ...DEFAULT_STALL, ...(stall || {}) };
     this.stallSig = '';
     this.present = false;
+    this.screen = null;        // a prompt read off the app's own window, for display only: { key, question, detail }
     this.memory = { bySession: {}, byFolder: {}, toolsSeen: [] };
     this.sessions = new Map();
     this.requests = new Map();
@@ -310,7 +311,9 @@ export class PadState {
     let hit = null;
     for (const e of s.pending.values()) {
       const limit = this.stallLimit(e.tool);
-      if (limit && t - e.at >= limit && (!hit || e.at < hit.entry.at)) hit = { entry: e, since: e.at + limit };
+      if (!limit) continue;
+      const due = e.prompted || t - e.at >= limit;
+      if (due && (!hit || e.at < hit.entry.at)) hit = { entry: e, since: e.prompted ? Math.min(t, e.at + limit) : e.at + limit };
     }
     return hit;
   }
@@ -319,6 +322,9 @@ export class PadState {
   view(s, t = this.now()) {
     const hit = this.stalled(s, t);
     if (!hit) return { state: s.state, kind: s.kind, detail: s.detail, since: s.since, guess: false };
+    if (this.screen && this.screen.key === s.key) {
+      return { state: 'needs', kind: 'permission', detail: `In the app: ${this.screen.question}`, since: hit.since, guess: false };
+    }
     return { state: 'needs', kind: 'permission', detail: `${hit.entry.tool} has not returned. Check the app`, since: hit.since, guess: true };
   }
 
@@ -331,8 +337,55 @@ export class PadState {
       stuck.push(s.key);
       if (!hit.entry.said) { hit.entry.said = true; this.say('EVENT', `${this.titleOf(s)} may be waiting on you: ${hit.entry.tool} has not returned`); }
     }
-    const sig = stuck.join('|');
+    if (this.screen && !stuck.includes(this.screen.key)) this.screen = null;
+    const sig = stuck.join('|') + (this.screen ? `#${this.screen.question}` : '');
     if (sig !== this.stallSig) { this.stallSig = sig; this.changed(); }
+  }
+
+  /* ----- prompts that belong to the app ----- */
+
+  // Some prompts never reach the permission hook: the app asks in its own window (opening a site,
+  // using another program). The bridge can read such a prompt off the window so the pad can show
+  // exactly what is being asked. It is shown only. The pad never answers these: that stays in the app.
+
+  // Sessions with a quick tool that has been out for at least `minMs`. One of these is where to look.
+  scanCandidates(minMs, t = this.now()) {
+    const out = [];
+    for (const s of this.sessions.values()) {
+      if (!s.slot || s.state !== 'working') continue;
+      for (const e of s.pending.values()) {
+        if (this.stallLimit(e.tool) && t - e.at >= minMs) { out.push(s.key); break; }
+      }
+    }
+    return out;
+  }
+
+  screenVisible() {
+    if (!this.screen || this.requests.get(this.target)) return false;
+    const s = this.sessions.get(this.screen.key);
+    return !!(s && this.stalled(s));
+  }
+
+  setScreenPrompt(key, question, detail = '') {
+    const s = this.sessions.get(key);
+    question = String(question || '').trim().slice(0, 300);
+    if (!s || !question) return this.clearScreenPrompt();
+    if (this.screen && this.screen.key === key && this.screen.question === question) return;
+    // The prompt explains the wait, so the oldest quick tool no longer has to sit out its full allowance.
+    let oldest = null;
+    for (const e of s.pending.values()) if (this.stallLimit(e.tool) && (!oldest || e.at < oldest.at)) oldest = e;
+    if (!oldest) return;
+    oldest.prompted = true; oldest.said = true;
+    this.screen = { key, question, detail: String(detail || '').trim().slice(0, 200) };
+    this.say('EVENT', `${this.titleOf(s)} is asking in the app: ${question}`);
+    this.changed();
+  }
+
+  clearScreenPrompt() {
+    if (!this.screen) return;
+    this.screen = null;
+    this.confirmUntil = 0;
+    this.changed();
   }
 
   /* ----- permission requests ----- */
@@ -423,8 +476,11 @@ export class PadState {
     const def = this.slotDefs.find(d => d.id === key);
     let result = {};
     if (def) result = this.pressSlot(def);
-    else if (key === 'accept') this.decide('allow');
-    else if (key === 'deny') this.decide('deny');
+    else if (key === 'accept' || key === 'deny') {
+      if (this.screenVisible()) {
+        this.say('KEY', `${key === 'accept' ? 'Accept' : 'Deny'} cannot answer this one. It is the Claude app's own prompt, so answer it in Claude`);
+      } else this.decide(key === 'accept' ? 'allow' : 'deny');
+    }
     else if (key === 'pass') this.release(this.target, "handed back to the app's own prompt");
     else if (UTILITY[key]) this.say('KEY', UTILITY[key]);
     else return result;
@@ -563,6 +619,15 @@ export class PadState {
         id: req.id, slot: s ? s.slot : null, who: def ? def.name : (s ? s.name : 'Closed session'), folder: s ? s.root : '',
         tool: req.toolName, summary: req.summary, danger: req.danger, held: !!req.respond,
         armedIn: Math.max(0, ARM_MS - (t - this.shownAt)), confirm: t <= this.confirmUntil,
+      };
+    }
+    if (!request && this.screenVisible()) {
+      const s = this.sessions.get(this.screen.key);
+      const def = this.slotDefs.find(d => d.id === s.slot);
+      request = {
+        id: 'screen', source: 'screen', slot: s.slot, who: def ? def.name : s.name, folder: s.root,
+        tool: this.stalled(s, t).entry.tool, summary: this.screen.question, danger: this.screen.detail,
+        held: false, armedIn: 0, confirm: false,
       };
     }
     const latest = [...this.sessions.values()].filter(s => s.effort).sort((a, b) => b.lastSeen - a.lastSeen)[0];

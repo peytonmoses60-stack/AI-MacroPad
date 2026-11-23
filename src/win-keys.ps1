@@ -4,6 +4,8 @@
 #     <id> TAB sent | focused | nofocus | error
 # A fourth field, confirm-effort, sends no keys. It presses the menu item that has keyboard focus,
 # but only if that item's name is an effort level, and answers confirmed or unverified.
+# find-prompt looks in the window for a permission prompt and answers  found TAB <question> TAB <detail>.
+# It only looks. Nothing in this script presses a permission prompt's buttons.
 # To try it by hand:  powershell -ExecutionPolicy Bypass -File src\win-keys.ps1
 # then type a line such as   1<TAB>Claude<TAB>^n   and press Enter.
 
@@ -39,6 +41,38 @@ function Confirm-Effort([IntPtr]$h) {
   return 'unverified'
 }
 
+# Looks in a window for a permission prompt: one question of the form "Allow Claude to ...?",
+# one Deny button, and one Allow button that is not "Always allow". Anything less clear-cut than
+# that is reported as none or ambiguous. This only reads; it presses nothing.
+function Get-Prompt([IntPtr]$h) {
+  if (-not $automationReady) { return @{ status = 'unsupported' } }
+  $root = [System.Windows.Automation.AutomationElement]::FromHandle($h)
+  if ($null -eq $root) { return @{ status = 'none' } }
+  $scope = [System.Windows.Automation.TreeScope]::Descendants
+  $typeProp = [System.Windows.Automation.AutomationElement]::ControlTypeProperty
+  $buttons = $root.FindAll($scope, (New-Object System.Windows.Automation.PropertyCondition($typeProp, [System.Windows.Automation.ControlType]::Button)))
+  $allow = @(); $deny = @()
+  foreach ($b in $buttons) {
+    $n = ([string]$b.Current.Name).Trim()
+    if ($n -match '^Allow (once|for this session)\b') { $allow += $b }
+    elseif ($n -match '^Deny\b') { $deny += $b }
+  }
+  if ($allow.Count -eq 0 -or $deny.Count -eq 0) { return @{ status = 'none' } }
+  if ($allow.Count -gt 1 -or $deny.Count -gt 1) { return @{ status = 'ambiguous' } }
+  $texts = $root.FindAll($scope, (New-Object System.Windows.Automation.PropertyCondition($typeProp, [System.Windows.Automation.ControlType]::Text)))
+  $questions = @(); $detail = ''
+  foreach ($t in $texts) {
+    $n = ([string]$t.Current.Name).Trim()
+    if ($n -match '^Allow Claude to .+\?$') { if ($questions -notcontains $n) { $questions += $n } }
+    elseif ($n -match '^Full access') { $detail = $n }
+  }
+  if ($questions.Count -eq 0) { return @{ status = 'none' } }
+  if ($questions.Count -gt 1) { return @{ status = 'ambiguous' } }
+  return @{ status = 'found'; question = $questions[0]; detail = $detail }
+}
+
+function Clean-Text([string]$s) { return (($s -replace '[\t\r\n]', ' ').Trim()) }
+
 function Find-Window([string]$title) {
   $all = @(Get-Process | Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero -and $_.MainWindowTitle })
   $hit = $all | Where-Object { $_.MainWindowTitle -eq $title } | Select-Object -First 1
@@ -73,12 +107,23 @@ while ($true) {
   $parts = $line.Split("`t")
   $id = $parts[0]
   $result = 'error'
+  $extra = ''
   try {
     $mode = ''
     if ($parts.Length -gt 3) { $mode = $parts[3] }
     if ($mode -eq 'confirm-effort') {
       $h = Find-Window $parts[1]
       if ($h -eq [IntPtr]::Zero) { $result = 'nofocus' } else { $result = Confirm-Effort $h }
+    }
+    elseif ($mode -eq 'find-prompt') {
+      # Looks only. It does not bring the window forward or press anything.
+      $h = Find-Window $parts[1]
+      if ($h -eq [IntPtr]::Zero) { $result = 'nofocus' }
+      else {
+        $found = Get-Prompt $h
+        $result = $found.status
+        if ($found.status -eq 'found') { $extra = "`t" + (Clean-Text $found.question) + "`t" + (Clean-Text $found.detail) }
+      }
     }
     elseif (-not (Focus-Window $parts[1])) { $result = 'nofocus' }
     elseif ($parts.Length -gt 2 -and $parts[2]) {
@@ -88,6 +133,6 @@ while ($true) {
     }
     else { $result = 'focused' }
   } catch { $result = 'error' }
-  [Console]::Out.WriteLine($id + "`t" + $result)
+  [Console]::Out.WriteLine($id + "`t" + $result + $extra)
   [Console]::Out.Flush()
 }

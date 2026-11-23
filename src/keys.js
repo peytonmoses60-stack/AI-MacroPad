@@ -24,7 +24,7 @@ export const ACTIONS = {
   'stick-down': { app: 'claude', keys: '^+i', label: 'Joystick down: model menu (Ctrl+Shift+I)' },
 };
 
-const MODES = new Set(['confirm-effort']);
+const MODES = new Set(['confirm-effort', 'find-prompt']);
 
 // One key, optionally with Ctrl and/or Shift. No Enter, no Space, no Alt, no sequences.
 const ONE_KEY = /^[\^+]{0,2}(\{(TAB|UP|DOWN|LEFT|RIGHT|ESC|HOME|END|PGUP|PGDN|F([1-9]|1[0-2]))\}|[a-z0-9,.\/\[\]\-=;'])$/i;
@@ -50,16 +50,19 @@ export function resolveActions(overrides = {}) {
 // run(title, keys) resolves to: 'sent', 'focused' (no keys asked for), 'nofocus', 'refused', 'unsupported' or 'error'.
 // run(title, '', 'confirm-effort') presses the highlighted menu item, but only if the helper can see that it is
 // an effort level. It resolves to 'confirmed' or 'unverified', and never falls back to a keystroke.
+// ask(title, 'find-prompt') looks in the window for a permission prompt and resolves to
+//   { status: 'found' | 'none' | 'ambiguous' | ..., fields: [question, detail] }. It only looks.
+// There is deliberately no mode that presses a permission prompt's button.
 export function createKeySender({ platform = process.platform, spawnFn = spawn, timeoutMs = 6000 } = {}) {
   if (platform !== 'win32') {
-    return { supported: false, run: async () => 'unsupported', warm() {}, stop() {} };
+    return { supported: false, run: async () => 'unsupported', ask: async () => ({ status: 'unsupported', fields: [] }), warm() {}, stop() {} };
   }
   let child = null, buf = '', seq = 0;
   const waiting = new Map();
   const settle = (id, result) => {
     const w = waiting.get(id);
     if (!w) return;
-    clearTimeout(w.timer); waiting.delete(id); w.resolve(result);
+    clearTimeout(w.timer); waiting.delete(id); w.resolve(Array.isArray(result) ? result : [result]);
   };
   const failAll = () => { for (const id of [...waiting.keys()]) settle(id, 'error'); };
 
@@ -76,8 +79,8 @@ export function createKeySender({ platform = process.platform, spawnFn = spawn, 
       while ((i = buf.indexOf('\n')) !== -1) {
         const line = buf.slice(0, i).trim();
         buf = buf.slice(i + 1);
-        const [id, result] = line.split('\t');
-        settle(id, result || 'error');
+        const [id, ...fields] = line.split('\t');
+        settle(id, fields.length && fields[0] ? fields : ['error']);
       }
     });
     const gone = () => { if (child === c) { child = null; buf = ''; } failAll(); };
@@ -87,22 +90,27 @@ export function createKeySender({ platform = process.platform, spawnFn = spawn, 
     return c;
   }
 
-  function run(title, keys = '', mode = '') {
-    if (!title) return Promise.resolve('nofocus');
-    if (keys && !safeKeys(keys)) return Promise.resolve('refused');
-    if (mode && !MODES.has(mode)) return Promise.resolve('refused');
+  const clean = v => String(v ?? '').replace(/[\t\r\n]/g, ' ');
+  function send(title, keys, mode, arg) {
+    if (!title) return Promise.resolve(['nofocus']);
+    if (keys && !safeKeys(keys)) return Promise.resolve(['refused']);
+    if (mode && !MODES.has(mode)) return Promise.resolve(['refused']);
     return new Promise(resolve => {
       const id = String(++seq);
       const timer = setTimeout(() => settle(id, 'error'), timeoutMs);
       waiting.set(id, { resolve, timer });
-      try { ensure().stdin.write(`${id}\t${String(title).replace(/[\t\r\n]/g, ' ')}\t${keys}${mode ? `\t${mode}` : ''}\n`); }
+      const tail = arg ? `\t${mode}\t${clean(arg)}` : mode ? `\t${mode}` : '';
+      try { ensure().stdin.write(`${id}\t${clean(title)}\t${keys}${tail}\n`); }
       catch { settle(id, 'error'); }
     });
   }
+  const run = (title, keys = '', mode = '') => send(title, keys, mode, '').then(f => f[0]);
+  const ask = (title, mode, arg = '') => send(title, '', mode, arg).then(f => ({ status: f[0], fields: f.slice(1) }));
 
   return {
     supported: true,
     run,
+    ask,
     warm() { try { ensure(); } catch { /* reported on first use */ } },
     stop() {
       const c = child; child = null;

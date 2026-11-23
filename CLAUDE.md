@@ -18,7 +18,7 @@ It has two parts: a bridge (`src/server.js`, a web server on `127.0.0.1:47600`) 
 
 - **Confirmed on Peyton's PC,** from his screenshots: the bridge runs, the hooks are installed, real Claude Desktop Code sessions turn their keys blue and green, the effort level comes through, a PowerShell command's permission request turns its key amber and shows the command, and the stalled-tool fallback catches the built-in browser's site prompt after 15 seconds.
 - **Not yet confirmed on Windows:** Accept and Deny against a real request, the shortcut keys and window focus, red and dim states, and file-edit prompts. The full list is the Phase 1 table in the roadmap.
-- **Known limits:** the pad cannot jump to one specific session inside Claude, and it cannot answer prompts owned by the Desktop app, such as the browser's "Allow Claude to act on this site?". Neither sends a permission request the pad can answer.
+- **Known limits:** the pad cannot jump to one specific session inside Claude, and it cannot answer prompts owned by the Desktop app, such as "Allow Claude to act on this site?" or "Allow Claude to use Notepad?". Those never reach the permission hook. The pad can read such a prompt off the Claude window and show it (written, never run on Windows; check V15), but it does not answer it.
 
 ## How to work here
 
@@ -43,6 +43,7 @@ Shortcut keys and bringing a window forward go through one PowerShell process, `
 
 - **Approvals go only through the `PermissionRequest` hook decision.** Never approve by sending input to a window: not Enter, not Space, not Ctrl+Enter, not a click at a screen position. If no verified channel exists for a prompt, do nothing and point Peyton to Claude.
 - **No shortcut may ever send Enter or Space.** Either could confirm a prompt that has focus. `safeKeys` in `src/keys.js` enforces this and a test covers it. Do not loosen it. The one thing that confirms a menu is the effort dial, at Peyton's request, and it does so without a keystroke: the helper presses the focused item through UI Automation only after checking that its name is an effort level, and confirms nothing if it cannot check. Do not add any other confirming action.
+- **The pad shows prompts owned by the Desktop app; it does not answer them.** `src/win-keys.ps1` has a mode that reads such a prompt and no mode that presses its buttons, and a test checks that. Pressing them was written once and held back: it would let software press "Allow" on Claude's own permission prompts. Do not add it unless Peyton asks for it after reading the open decision in the roadmap.
 - **A guess is never approvable.** A stalled-tool guess, a question, a plan review, or a prompt owned by the Desktop app must not light Accept unless the exact prompt has been positively identified (roadmap M2.6).
 - **Accept and Deny act on one specific, visible request**, after one second on screen, with two presses for commands that look destructive. That detection is a hint, not protection; do not describe it as more.
 - **"Approve from the pad" defaults on, by Peyton's decision on 23 Nov 2026.** Do not change the default in either direction. It only lets a deliberate press answer a request; nothing may ever approve without one, and requests are held only while a pad is open.

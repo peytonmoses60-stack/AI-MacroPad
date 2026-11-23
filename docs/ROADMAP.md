@@ -46,7 +46,8 @@ This is the engineering assessment the review notes asked for.
 | Failed turn (red), session end (dim), question or plan review (purple) | Implemented, unverified on Windows |
 | State restored after a bridge restart; behaviour with more than three sessions | Implemented, unverified on Windows |
 | Jumping to one specific session inside Claude | **Unsupported.** Claude Desktop documents no way to do it |
-| Answering a prompt owned by the Desktop app (browser site permission) | **Unsupported.** No permission request reaches the pad |
+| Showing a prompt owned by the Desktop app (browser site, use of another program) | Implemented, unverified on Windows. The bridge reads the prompt off the Claude window through Windows accessibility, turns the key amber early and shows the exact question |
+| Answering such a prompt from the pad | **Not built, on purpose.** No permission request reaches the pad, so answering would mean software pressing "Allow" in Claude's window. See "Open decisions" |
 | Usage | **Missing.** No reliable source |
 | Incognito / temporary chat | **Removed for good** (Peyton, 23 Nov). The pad has 12 keys |
 | Codex | **Missing.** The bridge accepts its events; nothing sends them yet |
@@ -75,6 +76,7 @@ One detail relies on inference: the "deny" decision the hook prints follows the 
 | A key only knows "no events" until a provider has ever sent one | After that, a broken provider looks the same as an idle one | M2.1 |
 | Terminal commands are excluded from the stalled-tool guess | If Claude ever fails to report a command's permission request, nothing shows. Commands are reported today | Phase 1, M2.3 |
 | Hardware lights would keep their last colour if the bridge stops | Stale green is the worst failure for this product | M6.3 |
+| Anything on the PC that can read the pad's access token can press Accept | That includes an agent session running as Peyton: it could approve its own request by calling the bridge. Today this needs a command the session would have to be allowed to run. It matters more now that approvals default on, and it is the main reason not to give the pad any way to answer the app's own prompts | Open decision 3; revisit in M0.5 |
 | Shortcut keys go to whichever window has focus at that instant | The helper checks focus just before sending and never sends Enter or Space, so the worst case is a stray Ctrl+N or arrow key | Rule in `CLAUDE.md`, test in `test/keys.test.js` |
 
 ### 6. Portable-profile recommendation
@@ -141,6 +143,7 @@ Needs the PC. Record each as passed, failed or not tried, with the trace lines t
 | V12 | Four or more sessions: the fourth is listed as "not on a key" or takes an idle one | Not tried |
 | V13 | A long terminal command (several minutes) stays blue and never shows as a guess | Not tried |
 | V14 | Turning the dial changes the effort level with no press, the log says "confirmed", and turning right raises it | Not tried |
+| V15 | When Claude shows "Allow Claude to use ...?" or "Allow Claude to act on ...?", the key turns amber within a few seconds and the card shows that exact question, with Accept dark | Not tried |
 
 ## Phase 2: reliable attention
 
@@ -151,7 +154,7 @@ Needs the PC. Record each as passed, failed or not tried, with the trace lines t
 | M2.3 | **Miss and false-alarm log.** Two controls on the page: "it was waiting and the pad did not show it" and "the pad showed it and nothing was waiting". Each writes a names-only line. A summary command counts them per week alongside time spent amber | The numbers the purchase decision needs come from one command |
 | M2.4 | **Optional notifications.** Off by default. One per alert, not per event; snooze; quiet hours | A request raises one notification, repeats only after the snooze, and none during quiet hours |
 | M2.5 | **Experiment: jump to a specific session.** Windows UI Automation on the sidebar. Read only; no coordinates; no writes to Claude's own files; fails quietly back to bringing the window forward | A written finding, and the feature only if all steps work |
-| M2.6 | **Experiment: identify a Desktop-owned prompt.** Find the dialog by UI Automation, confirm it names the same site as the tool call, and press its button by automation. No keystrokes. If the dialog cannot be read, stop | A written finding, and the feature only if identification is positive |
+| M2.6 | **Show a Desktop-owned prompt.** Written, with tests against a stand-in for the Windows helper; never run on Windows. The bridge reads the prompt off the Claude window and shows its exact question. It does not answer it; that part is an open decision | V15 passes on the PC. If Claude does not expose the prompt to accessibility, record that and turn the reading off |
 | M2.7 | **Stall tuning from the trace.** Per-tool waits set from what real sessions show | False guesses in the M2.3 log trend to zero |
 
 ## Phase 3: portable profile
@@ -216,6 +219,7 @@ Nothing here is bought on assumption. M6.1 costs nothing.
 
 1. **Is Codex the CLI or the desktop app?** The adapter in M5.2 depends on it.
 2. **Profile sync.** Manual export and import for the first version is the plan unless Peyton wants otherwise.
+3. **Should the pad be able to answer prompts that belong to the Claude app?** Peyton asked for Accept and Deny to work on "Allow Claude to use Notepad?". It is possible: read the prompt, show it, and press its own button through Windows accessibility after re-checking it. It was written and then held back, and is not in the code. The case against: these prompts are Claude's own safeguards (one of them grants full access to a program), the press would be made by software that an agent on the same PC could also drive, and a wrong match would approve something Peyton did not see. The case for: it is still Peyton's press, and it removes the one place the pad cannot help. Recommendation: leave it out, and use "Always allow" in Claude for sites and programs he trusts.
 
 ## Portable profile design
 

@@ -172,11 +172,21 @@ export async function start({ dataDir, configFile, port: portOverride, quiet = f
     res.end(html.replaceAll('__AGENT_PAD_TOKEN__', token));
   }
 
+  // An open pad page is what makes it worth holding a permission request for an answer.
+  let goneTimer = null;
   function events(req, res) {
     res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
     res.write(`data: ${JSON.stringify(state.snapshot())}\n\n`);
     clients.add(res);
-    req.on('close', () => clients.delete(res));
+    clearTimeout(goneTimer);
+    state.setPresent(true);
+    req.on('close', () => {
+      clients.delete(res);
+      if (clients.size) return;
+      // Give a page refresh a moment to reconnect before deciding nobody is at the pad.
+      goneTimer = setTimeout(() => { if (!clients.size) state.setPresent(false); }, 2000);
+      goneTimer.unref();
+    });
   }
 
   // A PermissionRequest hook waits here while the pad decides. Returning { decision: null }
@@ -297,7 +307,7 @@ export async function start({ dataDir, configFile, port: portOverride, quiet = f
   const ticker = setInterval(() => state.tick(), 1000); ticker.unref();
 
   const close = () => new Promise(resolve => {
-    clearInterval(ping); clearInterval(sweeper); clearInterval(ticker);
+    clearInterval(ping); clearInterval(sweeper); clearInterval(ticker); clearTimeout(goneTimer);
     keys.stop?.();
     for (const r of [...state.requests.values()]) state.release(r.id);
     saveNow();

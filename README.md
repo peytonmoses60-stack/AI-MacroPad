@@ -58,13 +58,16 @@ Shortcuts work on Windows only, and they never press Enter or Space for you: you
 
 ### Approving from the pad
 
-This is off when you first run it, so nothing about approvals changes until you choose. Turn on **Approve from the pad** on the page to try it. Then, when a session asks permission:
+**Approve from the pad** is on by default. It never approves anything by itself: a request is only answered when you press Accept or Deny. Switch it off on the page if you want every request to go to Claude alone; that choice is remembered.
+
+When a session asks permission:
 
 - The request appears on the page with the exact command.
 - Accept and Deny only work after the request has been on screen for one second.
 - Commands that look destructive need Accept pressed twice.
 - You can still answer in Claude as usual. Whichever answer comes first counts.
 - If the pad does not answer within two minutes, the request is left to Claude's own prompt.
+- Requests are only held for the pad while the pad page is open. With the page closed, Claude's own prompt handles them straight away.
 
 Questions, plan reviews and "may be waiting" guesses are never answered from the pad.
 
@@ -90,7 +93,8 @@ The 15-second guess is set by `stall` in `config.json`. `seconds` is the default
 
 `docs/ROADMAP.md` has the full plan and what has and has not been confirmed on a real Windows PC. The short list:
 
-- **Codex, Gemini and Muse keys stay dark.** The bridge accepts their events (the helper takes the tool name as its first argument), but nothing installs hooks for them yet.
+- **The Codex key stays dark.** The bridge accepts its events (the helper takes the tool name as its first argument), but nothing installs hooks for it yet.
+- **The Gemini and Muse keys cannot show status.** The Gemini desktop app and Muse in the browser give other programs nothing to read. The plan is for those keys to open the app.
 - **Usage** has no data source.
 - **A terminal command waiting for permission** is only shown if Claude reports the request. Terminal commands are excluded from the 15-second guess because they often run long.
 

@@ -45,7 +45,7 @@ Shortcut keys and bringing a window forward go through one PowerShell process, `
 - **No shortcut may ever send Enter or Space.** Either could confirm a prompt that has focus. `safeKeys` in `src/keys.js` enforces this and a test covers it. Do not loosen it, and do not add an action that confirms a menu.
 - **A guess is never approvable.** A stalled-tool guess, a question, a plan review, or a prompt owned by the Desktop app must not light Accept unless the exact prompt has been positively identified (roadmap M2.6).
 - **Accept and Deny act on one specific, visible request**, after one second on screen, with two presses for commands that look destructive. That detection is a hint, not protection; do not describe it as more.
-- **Leave "Approve from the pad" off.** Peyton turns it on. Do not auto-approve anything.
+- **"Approve from the pad" defaults on, by Peyton's decision on 23 Nov 2026.** Do not change the default in either direction. It only lets a deliberate press answer a request; nothing may ever approve without one, and requests are held only while a pad is open.
 - **`src/hook.js` prints nothing unless the pad made an explicit Accept or Deny decision, and exits 0 on every failure.** A stopped or broken bridge must never block or change what Claude does.
 - **Local only.** No outside requests, no telemetry, and no prompts, replies, command text, credentials or file contents written to disk. The trace holds names only; keep it that way.
 - **Never change Claude's settings or hooks, or anything outside this folder, without Peyton's approval.** The only way to change the hooks is `src/install-hooks.js`, which backs the settings file up first.

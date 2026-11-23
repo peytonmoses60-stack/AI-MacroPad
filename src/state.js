@@ -75,9 +75,12 @@ export class PadState {
   constructor({ slots = DEFAULT_SLOTS, settings = {}, saved = null, now = () => Date.now() } = {}) {
     this.slotDefs = slots.map(s => ({ id: s.id, name: s.name, tool: s.tool, folders: (s.folders || []).map(normPath).filter(Boolean) }));
     const { stall, ...rest } = settings;
-    this.settings = { muted: false, fromPad: false, holdSeconds: 120, quietMinutes: 30, ...rest };
+    // fromPad: Accept and Deny on the pad may answer permission requests. On by default (Peyton, 23 Nov 2026).
+    // It never approves anything by itself: a request is only answered by a deliberate press.
+    this.settings = { muted: false, fromPad: true, holdSeconds: 120, quietMinutes: 30, ...rest };
     this.stall = { ...DEFAULT_STALL, ...(stall || {}) };
     this.stallSig = '';
+    this.present = false;
     this.memory = { bySession: {}, byFolder: {}, toolsSeen: [] };
     this.sessions = new Map();
     this.requests = new Map();
@@ -347,7 +350,8 @@ export class PadState {
   }
 
   // Called for a PermissionRequest hook. `respond(decision)` is kept only when the pad is allowed
-  // to answer; otherwise the request is shown read-only and the app's own prompt decides.
+  // to answer and something is there to answer from; otherwise the request is shown read-only and
+  // the app's own prompt decides.
   openRequest(tool, p, respond, opts = {}) {
     if (!p || typeof p.session_id !== 'string' || !p.session_id) { respond(null); return null; }
     if (QUESTION_TOOLS.has(p.tool_name)) {
@@ -357,12 +361,22 @@ export class PadState {
       return null;
     }
     const s = this.touch(tool, p, opts.forceSlot);
-    const hold = this.settings.fromPad && !!s.slot;
+    const hold = this.settings.fromPad && this.present && !!s.slot;
     const req = this.addRequest(s, p, hold ? respond : null);
     if (!hold) respond(null);
     this.retarget();
     this.changed();
     return req.id;
+  }
+
+  // Whether anything is there to answer from: an open pad page, or later the hardware.
+  // With nothing there, requests are never held, so Claude is not kept waiting on an absent pad.
+  setPresent(on) {
+    on = !!on;
+    if (on === this.present) return;
+    this.present = on;
+    if (!on) for (const r of [...this.requests.values()]) this.release(r.id);
+    this.changed();
   }
 
   // Stop holding a request and let the app's own prompt take over. It stays visible, read-only.
@@ -568,7 +582,7 @@ export class PadState {
   // Only what is needed to bring alerts back after a restart. No prompts, commands or file contents.
   toJSON() {
     return {
-      version: 1,
+      version: 2,
       memory: this.memory,
       settings: { muted: this.settings.muted, fromPad: this.settings.fromPad },
       sessions: [...this.sessions.values()].filter(s => !s.test).map(s => ({
@@ -579,12 +593,13 @@ export class PadState {
   }
 
   restore(saved) {
-    if (!saved || saved.version !== 1) return;
+    if (!saved || (saved.version !== 1 && saved.version !== 2)) return;
     const m = saved.memory || {};
     this.memory = { bySession: { ...(m.bySession || {}) }, byFolder: { ...(m.byFolder || {}) }, toolsSeen: [...(m.toolsSeen || [])] };
     if (saved.settings) {
       this.settings.muted = !!saved.settings.muted;
-      this.settings.fromPad = !!saved.settings.fromPad;
+      // Version 1 files always held `false` here because that was the old default, not a choice.
+      if (saved.version >= 2 && typeof saved.settings.fromPad === 'boolean') this.settings.fromPad = saved.settings.fromPad;
     }
     const valid = new Set(this.slotDefs.map(d => d.id));
     for (const s of saved.sessions || []) {

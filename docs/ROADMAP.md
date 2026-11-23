@@ -47,8 +47,9 @@ This is the engineering assessment the review notes asked for.
 | Jumping to one specific session inside Claude | **Unsupported.** Claude Desktop documents no way to do it |
 | Answering a prompt owned by the Desktop app (browser site permission) | **Unsupported.** No permission request reaches the pad |
 | Usage | **Missing.** No reliable source |
-| Incognito / temporary chat | **Removed** at Peyton's request on 22 Nov; no shortcut exists and it is not part of Claude Code sessions. See "Open decisions" |
-| Codex, Gemini, Muse | **Missing.** The bridge accepts their events; nothing sends them |
+| Incognito / temporary chat | **Removed for good** (Peyton, 23 Nov). The pad has 12 keys |
+| Codex | **Missing.** The bridge accepts its events; nothing sends them yet |
+| Gemini (Windows desktop app) and Muse (browser) | **Unsupported for status.** Neither exposes anything the pad can read. Their keys can open the app; see Phase 5 |
 | Notifications, profile export/import, setup checker | **Missing** |
 | Real hardware | **Missing.** No adapter written; Work Louder's official API is pre-release |
 
@@ -56,7 +57,7 @@ One detail relies on inference: the "deny" decision the hook prints follows the 
 
 ### 4. Top three next steps
 
-1. **Phase 0 guardrail fixes.** Three small code changes with tests, doable on any machine.
+1. **The remaining Phase 0 guardrail fixes.** Small code changes with tests, doable on any machine.
 2. **Phase 1 validation on the Windows PC,** starting with Accept/Deny and the shortcut keys. About half an hour with the trace open.
 3. **Profile contract and config split** (M3.1 and M3.2). No behaviour change, and it is what unlocks the laptop.
 
@@ -64,7 +65,7 @@ One detail relies on inference: the "deny" decision the hook prints follows the 
 
 | Concern | Why it matters | Where it is handled |
 |---|---|---|
-| "Approve from the pad" is saved and comes back on after a restart | The pad could be answering permission requests without Peyton having chosen that today | M0.1 |
+| "Approve from the pad" is on by default (Peyton's decision) | The pad can answer permission requests without that having been switched on that day. Nothing is approved without a deliberate press, and a request is held for the pad only while the pad page is open | M0.1, done |
 | Accept and Deny act on whichever request the bridge has selected, not provably the one on screen | A request could change between drawing the card and the click. The one-second wait covers most of it | M0.2 |
 | A guessed wait and a real permission request are both amber | Peyton pressed Accept on a guess and nothing happened, with no explanation | M0.3 |
 | Destructive-command detection is a short list of patterns | It will miss things. It is a prompt to look twice, not protection | M0.4 |
@@ -92,15 +93,19 @@ These are binding. The first group is enforced in code today. The second group i
 - A stopped or broken bridge never blocks or changes what Claude does.
 - Local only: listens on `127.0.0.1`, token required, no outside requests.
 - No prompts, replies, command text or file contents on disk. The trace holds names only and can be turned off.
-- "Approve from the pad" ships off.
+- Nothing is approved without a deliberate press. "Approve from the pad" is on by default and can be switched off.
+- A request is held for the pad only while a pad is open. With the page closed, Claude's own prompt handles it at once.
 
 **Agreed, scheduled in Phase 0**
 
-- "Approve from the pad" resets to off every time the bridge starts.
 - Accept and Deny name the request they are answering, and the bridge refuses if it is no longer the current one.
 - Never Ctrl+Enter or any other focus-based input to approve, including for prompts the hook cannot reach. If no verified channel exists, do nothing and point Peyton to Claude.
 - A guessed wait looks different from a confirmed request.
 - Destructive-command detection is described as a hint everywhere it appears.
+
+**Not adopted**
+
+- The review notes asked for "Approve from the pad" to default off and reset to off on every start. Peyton decided on 23 Nov that it defaults on. What protects him instead is listed under "Enforced today".
 
 ## Phase 0: guardrail fixes
 
@@ -108,7 +113,7 @@ Small, independent, each with a test. None needs the Windows PC.
 
 | ID | Change | Done when |
 |---|---|---|
-| M0.1 | "Approve from the pad" is never restored from saved state. It starts off on every launch | A test loads saved state with it on and finds it off. README says so |
+| M0.1 | **Done.** "Approve from the pad" defaults on, replacing the notes' "reset to off". Requests are held only while a pad page is open, and a saved file from before the change cannot switch it off by accident | Tests cover the default, the closed-page case and the old saved file |
 | M0.2 | The page sends the id of the request it is showing with Accept and Deny. The bridge ignores the press if that id is not the selected request | Tests cover a stale id and a matching id. Hardware presses, which carry no id, keep the one-second rule |
 | M0.3 | A guessed wait is visibly different (steady, not breathing, with a "?" in its label), and the approval card says which key, which tool, and that it can only be answered in Claude | A page check shows the card text. A test confirms Accept is refused for a guess |
 | M0.4 | Wording: "looks destructive" everywhere, with a README line that detection is not exhaustive. Commands the pad cannot read plainly (encoded, piped into a shell, very long) are marked "review in Claude" and cannot be approved from the pad | Tests for the new class |
@@ -171,8 +176,8 @@ Design first, then an MVP on the virtual pad. No hardware needed. The design is 
 |---|---|---|
 | M5.1 | A small internal event vocabulary (session started, turn started, tool started, tool finished, permission requested, reply requested, turn finished, turn failed, session ended) and an adapter per provider that translates into it and declares what it supports. Claude becomes the first adapter with no behaviour change | Existing tests pass unchanged through the adapter |
 | M5.2 | Codex adapter and hook installer | Codex key lights from a real Codex session; support level stated in the README |
-| M5.3 | Gemini adapter | Blocked: which Gemini product |
-| M5.4 | Muse adapter | Blocked: which Muse product |
+| M5.3 | **Gemini key as a launcher.** Peyton uses the Gemini desktop app for Windows, which documents no way for another program to see its state. The key brings the app forward and shows "unavailable", never idle. Status is revisited only if Google documents an event source; the Gemini CLI and Antigravity have hooks, should Peyton ever use them | Pressing the key brings Gemini forward; the key is visibly "unavailable" |
+| M5.4 | **Muse key as a launcher.** Peyton uses Muse in the browser. There is no Windows desktop app yet (announced, no date). The key opens Muse and shows "unavailable". Revisit when the Windows app ships | Pressing the key opens Muse; the key is visibly "unavailable" |
 | M5.5 | Usage | Blocked: needs a documented source. Not built on scraped or undocumented endpoints |
 
 ## Phase 6: hardware on Windows
@@ -191,17 +196,22 @@ Nothing here is bought on assumption. M6.1 costs nothing.
 
 | ID | Milestone | Done when |
 |---|---|---|
-| M7.1 | Final physical key map, including the Incognito decision | Written here and in the profile |
+| M7.1 | Final physical key map: 12 keys, no Incognito | Written here and in the profile |
 | M7.2 | A week of normal work with the M2.3 log | Zero missed permission waits |
 | M7.3 | Optional: a read-only view of the other machine's agents over a private network. A separate listener, off by default, its own token, key states only, no request text and no control routes. The main bridge stays on `127.0.0.1` | Designed and reviewed before any code |
 
+## Decisions made (Peyton, 23 Nov 2026)
+
+- **"Approve from the pad" defaults on.** This replaces the notes' "default off, reset on every start".
+- **Incognito is out.** The pad has 12 keys and the key map is final on that point.
+- **Gemini** is the Gemini desktop app for Windows, on the Google AI Pro plan.
+- **Muse** is the free version in the browser. A desktop app would be welcome if one ships for Windows.
+- **Both computers run Windows.** The operating-system layer stays Windows-only for now.
+
 ## Open decisions for Peyton
 
-1. **Incognito.** It was removed on 22 Nov when the wide key turned out to be one key, leaving 12 keys for 13 requested functions. The review notes list it again. Options: leave it out (recommended for now: it has no shortcut and is not part of Claude Code sessions, so it would need the same automation as M2.5), or bring it back as a hold on New chat or on a second layer.
-2. **"Approve from the pad" resetting on every start (M0.1).** Safer, and it means flipping the switch each time the pad starts. Recommended.
-3. **Which Gemini and which Muse**, and whether Codex is the CLI or the desktop app.
-4. **Is the laptop Windows?** The plan assumes so.
-5. **Profile sync.** Manual export and import for the first version (recommended), with anything automatic considered only after that is reliable.
+1. **Is Codex the CLI or the desktop app?** The adapter in M5.2 depends on it.
+2. **Profile sync.** Manual export and import for the first version is the plan unless Peyton wants otherwise.
 
 ## Portable profile design
 

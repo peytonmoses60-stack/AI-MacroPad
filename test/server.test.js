@@ -29,7 +29,14 @@ async function boot() {
     child.on('exit', status => resolve({ status, stdout }));
     child.stdin.end(JSON.stringify(payload));
   });
-  return { app, dir, env, get, post, hook };
+  // Opens the live feed the way the pad page does, so the bridge knows a pad is there.
+  const connectPad = async () => {
+    const ctl = new AbortController();
+    const res = await fetch(`${app.url}/events?token=${app.token}`, { signal: ctl.signal });
+    await res.body.getReader().read();
+    return () => ctl.abort();
+  };
+  return { app, dir, env, get, post, hook, connectPad };
 }
 
 test('the page is served with the token; everything else needs it', async () => {
@@ -89,9 +96,9 @@ test('nothing private is written to disk', async () => {
 });
 
 test('Accept on the pad makes the hook print an allow decision', async () => {
-  const { app, env, get, post } = await boot();
+  const { app, env, get, post, connectPad } = await boot();
+  const closePad = await connectPad();
   try {
-    await post('/api/setting', { name: 'fromPad', value: true });
     const child = spawn(process.execPath, [HOOK, 'claude'], { env });
     let out = '';
     child.stdout.on('data', c => { out += c; });
@@ -108,19 +115,34 @@ test('Accept on the pad makes the hook print an allow decision', async () => {
     assert.equal(await exited, 0);
     assert.deepEqual(JSON.parse(out), { hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow' } } });
     assert.equal((await get()).slots[0].state, 'working');
+  } finally { closePad(); await app.close(); }
+});
+
+test('with no pad page open the hook returns at once, even though approving is on', async () => {
+  const { app, get, hook } = await boot();
+  try {
+    const began = Date.now();
+    const r = await hook({ session_id: 's1', cwd: 'C:\\dev\\shop', hook_event_name: 'PermissionRequest', tool_name: 'Bash', tool_input: { command: 'npm test' } });
+    assert.deepEqual([r.status, r.stdout], [0, '']);
+    assert.ok(Date.now() - began < 3000);
+    const snap = await get();
+    assert.equal(snap.settings.fromPad, true);
+    assert.equal(snap.request.held, false);
   } finally { await app.close(); }
 });
 
 test('with pad approvals off the hook returns at once and prints nothing', async () => {
-  const { app, get, hook } = await boot();
+  const { app, get, hook, post, connectPad } = await boot();
+  const closePad = await connectPad();
   try {
+    await post('/api/setting', { name: 'fromPad', value: false });
     const began = Date.now();
     const r = await hook({ session_id: 's1', cwd: 'C:\\dev\\shop', hook_event_name: 'PermissionRequest', tool_name: 'Bash', tool_input: { command: 'npm test' } });
     assert.equal(r.status, 0);
     assert.equal(r.stdout, '');
     assert.ok(Date.now() - began < 3000);
     assert.equal((await get()).slots[0].state, 'needs');
-  } finally { await app.close(); }
+  } finally { closePad(); await app.close(); }
 });
 
 test('if the bridge is stopped, the hook still exits cleanly and silently', async () => {

@@ -5,6 +5,7 @@ import { PadState, projectRoot, normPath, dangerOf, summarize, DEFAULT_SLOTS, AR
 function make(extra = {}) {
   const clock = { t: 1_000_000 };
   const pad = new PadState({ now: () => clock.t, ...extra });
+  pad.setPresent(true); // a pad page is open, as it is whenever someone can press Accept
   const ev = (id, name, more = {}) => pad.ingest('claude', { session_id: id, cwd: `C:\\dev\\${id}`, hook_event_name: name, ...more });
   const slot = id => pad.snapshot().slots.find(s => s.id === id);
   return { pad, clock, ev, slot };
@@ -92,7 +93,7 @@ test('a pinned folder always uses its key, worktrees included', () => {
 });
 
 test('with pad approvals off, a request is shown but the app decides', () => {
-  const { pad, slot } = make();
+  const { pad, slot } = make({ settings: { fromPad: false } });
   let answer = 'unset';
   pad.openRequest('claude', { session_id: 'a', cwd: 'C:\\dev\\a', tool_name: 'Bash', tool_input: { command: 'npm test' } }, d => { answer = d; });
   assert.equal(answer, null, 'the hook is released straight away');
@@ -217,4 +218,43 @@ test('clearing a key resets a stuck session', () => {
   ev('a', 'UserPromptSubmit');
   pad.clearSlot('claude1');
   assert.equal(slot('claude1').state, 'idle');
+});
+
+const ask = (pad, id, onAnswer) => pad.openRequest('claude',
+  { session_id: id, cwd: `C:\\dev\\${id}`, tool_name: 'Bash', tool_input: { command: 'npm test' } }, onAnswer);
+
+test('approving from the pad is on unless it was turned off', () => {
+  const { pad } = make();
+  assert.equal(pad.snapshot().settings.fromPad, true);
+  let answer = 'unset';
+  ask(pad, 'a', d => { answer = d; });
+  assert.equal(answer, 'unset', 'held for the pad, and still not answered until someone presses');
+});
+
+test('with no pad open, a request is never held', () => {
+  const { pad } = make();
+  pad.setPresent(false);
+  let answer = 'unset';
+  ask(pad, 'a', d => { answer = d; });
+  assert.equal(answer, null);
+  assert.equal(pad.snapshot().request.held, false);
+});
+
+test('closing the last pad releases anything being held', () => {
+  const { pad, slot } = make();
+  let answer = 'unset';
+  ask(pad, 'a', d => { answer = d; });
+  pad.setPresent(false);
+  assert.equal(answer, null);
+  assert.equal(slot('claude1').state, 'needs', 'the key still shows it is waiting');
+});
+
+test('an old saved file cannot switch pad approvals off by accident, but a real choice is kept', () => {
+  const old = { version: 1, memory: {}, settings: { muted: true, fromPad: false }, sessions: [] };
+  const { pad } = make({ saved: old });
+  assert.equal(pad.snapshot().settings.fromPad, true);
+  assert.equal(pad.snapshot().settings.muted, true);
+  pad.setSetting('fromPad', false);
+  const again = make({ saved: JSON.parse(JSON.stringify(pad.toJSON())) });
+  assert.equal(again.pad.snapshot().settings.fromPad, false);
 });

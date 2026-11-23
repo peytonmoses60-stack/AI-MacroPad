@@ -1,6 +1,6 @@
 {
   "name": "agent-pad",
-  "version": "0.1.0",
+  "version": "0.6.0",
   "description": "A virtual desk pad that lights up from live AI agent session events.",
   "private": true,
   "type": "module",

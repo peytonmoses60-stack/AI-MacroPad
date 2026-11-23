@@ -9,16 +9,30 @@ import crypto from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { PadState, DEFAULT_SLOTS, DEFAULT_STALL } from './state.js';
-import { createKeySender, resolveActions } from './keys.js';
+import { createKeySender, resolveActions, isSessionId } from './keys.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAX_BODY = 1024 * 1024;
 
+// The version in package.json, shown on the page so an out-of-date copy is easy to spot.
+export const VERSION = (() => {
+  try { return String(JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version || ''); } catch { return ''; }
+})();
+
 const DEFAULT_CONFIG = {
   port: 47600,
   approvals: { holdSeconds: 120 },
+  // openMs: how long the effort menu is assumed to stay open after the dial last touched it.
+  // settleMs: how long the dial must rest before the highlighted level is confirmed.
+  dial: { autoConfirm: true, openMs: 4000, settleMs: 700 },
+  // Reading prompts off the app's own window (Windows only). afterMs: how long a quick tool must be
+  // out before looking. everyMs: how often to look again while it stays out.
+  screenPrompts: { enabled: true, afterMs: 3000, everyMs: 2500 },
   quietMinutes: 30,
   focusOnPress: true,
+  // Pressing a Claude key asks the Claude app to show that key's session (Windows only), through
+  // the app's own claude://resume link. Off: the key only brings the Claude window forward.
+  jump: { enabled: true },
   windowTitles: { claude: 'Claude', codex: 'Codex', gemini: '', muse: '' },
   shortcuts: {},
   stall: DEFAULT_STALL,
@@ -53,6 +67,9 @@ export function loadConfig(file) {
   return {
     ...DEFAULT_CONFIG, ...found,
     approvals: { ...DEFAULT_CONFIG.approvals, ...(found.approvals || {}) },
+    dial: { ...DEFAULT_CONFIG.dial, ...(found.dial || {}) },
+    screenPrompts: { ...DEFAULT_CONFIG.screenPrompts, ...(found.screenPrompts || {}) },
+    jump: { ...DEFAULT_CONFIG.jump, ...(found.jump || {}) },
     windowTitles: { ...DEFAULT_CONFIG.windowTitles, ...(found.windowTitles || {}) },
     stall: { ...DEFAULT_STALL, ...(found.stall || {}) },
     shortcuts: found.shortcuts && typeof found.shortcuts === 'object' ? found.shortcuts : {},
@@ -92,11 +109,73 @@ export async function start({ dataDir, configFile, port: portOverride, quiet = f
     settings: { holdSeconds: config.approvals.holdSeconds, quietMinutes: config.quietMinutes, stall: config.stall },
     saved: readJsonFile(stateFile, null),
   });
+  state.version = VERSION;
 
   // Shortcut keys and bringing windows forward (Windows only; elsewhere every request answers 'unsupported').
   const keys = keySender || createKeySender();
   const actions = resolveActions(config.shortcuts);
   keys.warm?.();
+
+  // The dial. Turning it is the whole gesture: the bridge opens Claude's effort menu if it is not
+  // already open, moves the highlight, and once the dial rests, confirms the highlighted level.
+  // Confirming is done by the helper pressing that one menu item after checking it is an effort level.
+  // If it cannot check, nothing is confirmed and the menu is left open for Peyton to pick from.
+  const dial = { openUntil: 0, moved: 0, timer: null, chain: Promise.resolve() };
+  function dialTurn(dir) {
+    const title = config.windowTitles.claude;
+    dial.chain = dial.chain.then(async () => {
+      let outcome = 'sent';
+      if (Date.now() > dial.openUntil) outcome = await keys.run(title, actions['dial-press'].keys);
+      if (outcome === 'sent') outcome = await keys.run(title, actions[dir > 0 ? 'dial-right' : 'dial-left'].keys);
+      if (outcome !== 'sent') {
+        dial.openUntil = 0;
+        state.note('DIAL', `Effort dial: ${outcome === 'unsupported' ? 'shortcuts only work on Windows' : outcome === 'nofocus' ? `could not bring the ${title} window forward` : 'failed'}`);
+        return;
+      }
+      dial.openUntil = Date.now() + config.dial.openMs;
+      dial.moved += dir;
+      clearTimeout(dial.timer);
+      dial.timer = setTimeout(dialSettle, config.dial.settleMs);
+      dial.timer.unref();
+    }).catch(() => {});
+  }
+  function dialSettle() {
+    dial.chain = dial.chain.then(async () => {
+      const steps = dial.moved; dial.moved = 0;
+      const moved = `${Math.abs(steps)} step${Math.abs(steps) === 1 ? '' : 's'} ${steps >= 0 ? 'up' : 'down'}`;
+      if (!config.dial.autoConfirm) { state.note('DIAL', `Effort dial: moved ${moved}. Pick it in Claude to confirm`); return; }
+      const outcome = await keys.run(config.windowTitles.claude, '', 'confirm-effort');
+      if (outcome === 'confirmed') {
+        dial.openUntil = 0;
+        state.note('DIAL', `Effort dial: moved ${moved} and confirmed`);
+      } else {
+        // The menu is still open with the new level highlighted. Assume it stays open a while longer.
+        dial.openUntil = Date.now() + config.dial.openMs * 4;
+        state.note('DIAL', `Effort dial: moved ${moved}, but could not confirm it for you. Pick it in Claude`);
+      }
+    }).catch(() => {});
+  }
+
+  // Prompts that belong to the app. When exactly one session has a quick tool that has not come back,
+  // look in the app's window for a prompt. If one is there, the pad turns the key amber straight away
+  // and shows its exact question. It is display only: the pad never answers these prompts.
+  const scan = { busy: false, last: 0 };
+  async function scanForPrompt() {
+    if (scan.busy || !keys.ask || !config.screenPrompts.enabled) return;
+    const candidates = state.scanCandidates(config.screenPrompts.afterMs);
+    if (candidates.length !== 1) { state.clearScreenPrompt(); return; }
+    if (Date.now() - scan.last < config.screenPrompts.everyMs) return;
+    const key = candidates[0];
+    const title = config.windowTitles[key.split(':')[0]];
+    if (!title) return;
+    scan.busy = true; scan.last = Date.now();
+    try {
+      const r = await keys.ask(title, 'find-prompt');
+      const still = state.scanCandidates(config.screenPrompts.afterMs);
+      if (r.status === 'found' && still.length === 1 && still[0] === key) state.setScreenPrompt(key, r.fields[0], r.fields[1]);
+      else if (r.status !== 'found') state.clearScreenPrompt();
+    } catch { /* looking is best effort */ } finally { scan.busy = false; }
+  }
 
   // A plain list of which events arrived, for working out what an app does and does not report.
   // Event and tool names only: no prompts, commands or file contents.
@@ -172,11 +251,21 @@ export async function start({ dataDir, configFile, port: portOverride, quiet = f
     res.end(html.replaceAll('__AGENT_PAD_TOKEN__', token));
   }
 
+  // An open pad page is what makes it worth holding a permission request for an answer.
+  let goneTimer = null;
   function events(req, res) {
     res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
     res.write(`data: ${JSON.stringify(state.snapshot())}\n\n`);
     clients.add(res);
-    req.on('close', () => clients.delete(res));
+    clearTimeout(goneTimer);
+    state.setPresent(true);
+    req.on('close', () => {
+      clients.delete(res);
+      if (clients.size) return;
+      // Give a page refresh a moment to reconnect before deciding nobody is at the pad.
+      goneTimer = setTimeout(() => { if (!clients.size) state.setPresent(false); }, 2000);
+      goneTimer.unref();
+    });
   }
 
   // A PermissionRequest hook waits here while the pad decides. Returning { decision: null }
@@ -239,15 +328,29 @@ export async function start({ dataDir, configFile, port: portOverride, quiet = f
           const result = state.press(String(body.key || ''));
           const title = result && result.focus && config.focusOnPress ? config.windowTitles[result.focus] : '';
           if (title) {
-            keys.run(title).then(outcome => {
+            const bringForward = () => keys.run(title).then(outcome => {
               if (outcome === 'nofocus' || outcome === 'error') state.note('PAD', `Could not bring the ${title} window forward`);
             });
+            // A Claude key stands for one session, so ask Claude to show that session, not just its window.
+            const canJump = result.focus === 'claude' && config.jump.enabled && isSessionId(result.session) && typeof keys.ask === 'function';
+            if (canJump) {
+              keys.ask(title, 'open-session', result.session).then(r => {
+                if (r && r.status === 'opened') return;
+                if (r && r.status !== 'unsupported') state.note('PAD', `Could not ask ${title} to show that session, so only its window was brought forward`);
+                return bringForward();
+              });
+            } else bringForward();
           }
           return send(res, 200, { ok: true });
         }
         case '/api/action': {
           const act = actions[String(body.id || '')];
           if (!act) return send(res, 400, { error: 'unknown action' });
+          if (body.id === 'dial-left' || body.id === 'dial-right') {
+            dialTurn(body.id === 'dial-right' ? 1 : -1);
+            return send(res, 200, { ok: true });
+          }
+          if (body.id === 'dial-press') dial.openUntil = Date.now() + config.dial.openMs;
           keys.run(config.windowTitles[act.app], act.keys).then(outcome => {
             const tail = {
               sent: '', focused: '',
@@ -294,10 +397,10 @@ export async function start({ dataDir, configFile, port: portOverride, quiet = f
 
   const ping = setInterval(() => { for (const c of clients) c.write(': ping\n\n'); }, 20000); ping.unref();
   const sweeper = setInterval(() => state.sweep(), 3600 * 1000); sweeper.unref();
-  const ticker = setInterval(() => state.tick(), 1000); ticker.unref();
+  const ticker = setInterval(() => { state.tick(); scanForPrompt(); }, 1000); ticker.unref();
 
   const close = () => new Promise(resolve => {
-    clearInterval(ping); clearInterval(sweeper); clearInterval(ticker);
+    clearInterval(ping); clearInterval(sweeper); clearInterval(ticker); clearTimeout(goneTimer); clearTimeout(dial.timer);
     keys.stop?.();
     for (const r of [...state.requests.values()]) state.release(r.id);
     saveNow();
@@ -306,8 +409,8 @@ export async function start({ dataDir, configFile, port: portOverride, quiet = f
     server.closeAllConnections?.();
   });
 
-  if (!quiet) console.log(`Agent pad is running at http://127.0.0.1:${port}  (Ctrl+C to stop)`);
-  return { server, state, port, token, config, close, url: `http://127.0.0.1:${port}` };
+  if (!quiet) console.log(`Agent Pad ${VERSION} is running at http://127.0.0.1:${port}  (Ctrl+C to stop)`);
+  return { server, state, port, token, config, version: VERSION, close, scanNow: scanForPrompt, url: `http://127.0.0.1:${port}` };
 }
 
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);

@@ -75,9 +75,14 @@ export class PadState {
   constructor({ slots = DEFAULT_SLOTS, settings = {}, saved = null, now = () => Date.now() } = {}) {
     this.slotDefs = slots.map(s => ({ id: s.id, name: s.name, tool: s.tool, folders: (s.folders || []).map(normPath).filter(Boolean) }));
     const { stall, ...rest } = settings;
-    this.settings = { muted: false, fromPad: false, holdSeconds: 120, quietMinutes: 30, ...rest };
+    // fromPad: Accept and Deny on the pad may answer permission requests. On by default (Peyton, 23 Nov 2026).
+    // It never approves anything by itself: a request is only answered by a deliberate press.
+    this.settings = { muted: false, fromPad: true, holdSeconds: 120, quietMinutes: 30, ...rest };
     this.stall = { ...DEFAULT_STALL, ...(stall || {}) };
     this.stallSig = '';
+    this.version = ''; // the program's version, set by the bridge and shown on the page
+    this.present = false;
+    this.screen = null;        // a prompt read off the app's own window, for display only: { key, question, detail }
     this.memory = { bySession: {}, byFolder: {}, toolsSeen: [] };
     this.sessions = new Map();
     this.requests = new Map();
@@ -158,8 +163,10 @@ export class PadState {
   }
 
   // Which key does this session live on? Pinned folder first, then where it was last time,
-  // then the first free key, then a key whose sessions are all idle. Otherwise none.
-  assign(s) {
+  // then the first free key, then a key whose sessions are all idle. Otherwise none for now:
+  // promote() gives it a key as soon as it needs you.
+  // reuseIdle: false stops it taking a key from idle sessions, so idle sessions never trade keys.
+  assign(s, { reuseIdle = true } = {}) {
     const defs = this.slotDefs.filter(d => d.tool === s.tool);
     if (!defs.length) return null;
     if (s.forceSlot && defs.some(d => d.id === s.forceSlot)) return s.forceSlot;
@@ -178,16 +185,55 @@ export class PadState {
     const reusable = open
       .filter(d => this.sessionsOn(d.id).every(x => x.state === 'idle'))
       .sort((a, b) => lastSeenOn(a.id) - lastSeenOn(b.id))[0];
-    if (reusable) {
+    if (reusable && reuseIdle) {
       for (const x of this.sessionsOn(reusable.id)) x.slot = null;
       return this.remember(s, reusable.id);
     }
     return null;
   }
 
+  // Sessions with no key take one when a key frees up or goes idle. Run wherever that can happen:
+  // a session ending, a key cleared, a session bumped by promote(). An idle session with no key
+  // takes only a free key, never another idle session's, or idle sessions would swap keys on
+  // every press.
   rebalance() {
     const waiting = [...this.sessions.values()].filter(s => !s.slot).sort((a, b) => this.urgency(a, b));
-    for (const s of waiting) s.slot = this.assign(s);
+    for (const s of waiting) s.slot = this.assign(s, { reuseIdle: this.view(s).state !== 'idle' });
+  }
+
+  // A session with no key that needs you (a request, a question, a failed turn) must still light up.
+  // It takes a key from sessions that do not need you: idle ones first, then working ones, finished
+  // ones last (their green light is an unread alert). A key whose sessions need you is never taken.
+  // A stalled-tool guess may be wrong, so it takes only idle or working keys, never a green one.
+  // The sessions it displaces take the next key that frees up or goes idle (rebalance).
+  promote() {
+    const urgent = s => { const v = this.view(s).state; return v === 'needs' || v === 'error'; };
+    const waiting = [...this.sessions.values()].filter(s => !s.slot && urgent(s)).sort((a, b) => this.urgency(a, b));
+    if (!waiting.length) return false;
+    const RANK = { idle: 0, working: 1, done: 2 };
+    let moved = false;
+    for (const s of waiting) {
+      const maxRank = this.view(s).guess ? RANK.working : RANK.done;
+      const best = this.slotDefs
+        .filter(d => d.tool === s.tool && !d.folders.length)
+        .map(d => {
+          const on = this.sessionsOn(d.id);
+          if (on.some(urgent)) return null;
+          const rank = on.length ? Math.max(...on.map(x => RANK[this.view(x).state] ?? 1)) : -1;
+          const last = on.length ? Math.max(...on.map(x => x.lastSeen)) : 0;
+          return { d, on, rank, last };
+        })
+        .filter(k => k && k.rank <= maxRank)
+        .sort((a, b) => a.rank - b.rank || a.last - b.last)[0];
+      if (!best) continue;
+      for (const x of best.on) x.slot = null;
+      s.slot = this.remember(s, best.d.id);
+      const from = best.on.length ? ` from ${best.on.map(x => x.name).join(', ')}` : '';
+      this.say('PAD', `${s.name} needs you, so it moved onto ${best.d.name}${from}`);
+      moved = true;
+    }
+    if (moved) this.rebalance();
+    return moved;
   }
 
   endSession(tool, p) {
@@ -307,7 +353,9 @@ export class PadState {
     let hit = null;
     for (const e of s.pending.values()) {
       const limit = this.stallLimit(e.tool);
-      if (limit && t - e.at >= limit && (!hit || e.at < hit.entry.at)) hit = { entry: e, since: e.at + limit };
+      if (!limit) continue;
+      const due = e.prompted || t - e.at >= limit;
+      if (due && (!hit || e.at < hit.entry.at)) hit = { entry: e, since: e.prompted ? Math.min(t, e.at + limit) : e.at + limit };
     }
     return hit;
   }
@@ -316,6 +364,9 @@ export class PadState {
   view(s, t = this.now()) {
     const hit = this.stalled(s, t);
     if (!hit) return { state: s.state, kind: s.kind, detail: s.detail, since: s.since, guess: false };
+    if (this.screen && this.screen.key === s.key) {
+      return { state: 'needs', kind: 'permission', detail: `In the app: ${this.screen.question}`, since: hit.since, guess: false };
+    }
     return { state: 'needs', kind: 'permission', detail: `${hit.entry.tool} has not returned. Check the app`, since: hit.since, guess: true };
   }
 
@@ -328,8 +379,55 @@ export class PadState {
       stuck.push(s.key);
       if (!hit.entry.said) { hit.entry.said = true; this.say('EVENT', `${this.titleOf(s)} may be waiting on you: ${hit.entry.tool} has not returned`); }
     }
-    const sig = stuck.join('|');
-    if (sig !== this.stallSig) { this.stallSig = sig; this.changed(); }
+    if (this.screen && !stuck.includes(this.screen.key)) this.screen = null;
+    const sig = stuck.join('|') + (this.screen ? `#${this.screen.question}` : '');
+    if (sig !== this.stallSig) { this.stallSig = sig; this.promote(); this.changed(); }
+  }
+
+  /* ----- prompts that belong to the app ----- */
+
+  // Some prompts never reach the permission hook: the app asks in its own window (opening a site,
+  // using another program). The bridge can read such a prompt off the window so the pad can show
+  // exactly what is being asked. It is shown only. The pad never answers these: that stays in the app.
+
+  // Sessions with a quick tool that has been out for at least `minMs`. One of these is where to look.
+  scanCandidates(minMs, t = this.now()) {
+    const out = [];
+    for (const s of this.sessions.values()) {
+      if (!s.slot || s.state !== 'working') continue;
+      for (const e of s.pending.values()) {
+        if (this.stallLimit(e.tool) && t - e.at >= minMs) { out.push(s.key); break; }
+      }
+    }
+    return out;
+  }
+
+  screenVisible() {
+    if (!this.screen || this.requests.get(this.target)) return false;
+    const s = this.sessions.get(this.screen.key);
+    return !!(s && this.stalled(s));
+  }
+
+  setScreenPrompt(key, question, detail = '') {
+    const s = this.sessions.get(key);
+    question = String(question || '').trim().slice(0, 300);
+    if (!s || !question) return this.clearScreenPrompt();
+    if (this.screen && this.screen.key === key && this.screen.question === question) return;
+    // The prompt explains the wait, so the oldest quick tool no longer has to sit out its full allowance.
+    let oldest = null;
+    for (const e of s.pending.values()) if (this.stallLimit(e.tool) && (!oldest || e.at < oldest.at)) oldest = e;
+    if (!oldest) return;
+    oldest.prompted = true; oldest.said = true;
+    this.screen = { key, question, detail: String(detail || '').trim().slice(0, 200) };
+    this.say('EVENT', `${this.titleOf(s)} is asking in the app: ${question}`);
+    this.changed();
+  }
+
+  clearScreenPrompt() {
+    if (!this.screen) return;
+    this.screen = null;
+    this.confirmUntil = 0;
+    this.changed();
   }
 
   /* ----- permission requests ----- */
@@ -347,7 +445,8 @@ export class PadState {
   }
 
   // Called for a PermissionRequest hook. `respond(decision)` is kept only when the pad is allowed
-  // to answer; otherwise the request is shown read-only and the app's own prompt decides.
+  // to answer and something is there to answer from; otherwise the request is shown read-only and
+  // the app's own prompt decides.
   openRequest(tool, p, respond, opts = {}) {
     if (!p || typeof p.session_id !== 'string' || !p.session_id) { respond(null); return null; }
     if (QUESTION_TOOLS.has(p.tool_name)) {
@@ -357,12 +456,23 @@ export class PadState {
       return null;
     }
     const s = this.touch(tool, p, opts.forceSlot);
-    const hold = this.settings.fromPad && !!s.slot;
-    const req = this.addRequest(s, p, hold ? respond : null);
-    if (!hold) respond(null);
+    const req = this.addRequest(s, p, null);
+    this.promote(); // a session with no key gets one now that it needs you
+    const hold = this.settings.fromPad && this.present && !!s.slot;
+    if (hold) req.respond = respond; else respond(null);
     this.retarget();
     this.changed();
     return req.id;
+  }
+
+  // Whether anything is there to answer from: an open pad page, or later the hardware.
+  // With nothing there, requests are never held, so Claude is not kept waiting on an absent pad.
+  setPresent(on) {
+    on = !!on;
+    if (on === this.present) return;
+    this.present = on;
+    if (!on) for (const r of [...this.requests.values()]) this.release(r.id);
+    this.changed();
   }
 
   // Stop holding a request and let the app's own prompt take over. It stays visible, read-only.
@@ -391,6 +501,7 @@ export class PadState {
   }
 
   retarget() {
+    this.promote();
     if (this.target && this.requests.has(this.target)) return;
     const onKeys = [...this.requests.values()].filter(r => this.sessions.get(r.key)?.slot);
     this.target = onKeys.length === 1 ? onKeys[0].id : null;
@@ -408,9 +519,12 @@ export class PadState {
   press(key) {
     const def = this.slotDefs.find(d => d.id === key);
     let result = {};
-    if (def) result = this.pressSlot(def);
-    else if (key === 'accept') this.decide('allow');
-    else if (key === 'deny') this.decide('deny');
+    if (def) { result = this.pressSlot(def); this.rebalance(); } // a cleared key may now be idle
+    else if (key === 'accept' || key === 'deny') {
+      if (this.screenVisible()) {
+        this.say('KEY', `${key === 'accept' ? 'Accept' : 'Deny'} cannot answer this one. It is the Claude app's own prompt, so answer it in Claude`);
+      } else this.decide(key === 'accept' ? 'allow' : 'deny');
+    }
     else if (key === 'pass') this.release(this.target, "handed back to the app's own prompt");
     else if (UTILITY[key]) this.say('KEY', UTILITY[key]);
     else return result;
@@ -439,7 +553,9 @@ export class PadState {
         : `${def.name} → brought to front. Answer it in the app's own prompt`);
       else this.say('KEY', `${def.name} → brought to front`);
     }
-    return { focus: def.tool };
+    // Which session the key stands for right now, so the bridge can ask the app to show that one.
+    const jump = req ? this.sessions.get(req.key) : list[0];
+    return jump && !jump.test ? { focus: def.tool, session: jump.sessionId } : { focus: def.tool };
   }
 
   decide(how) {
@@ -551,12 +667,22 @@ export class PadState {
         armedIn: Math.max(0, ARM_MS - (t - this.shownAt)), confirm: t <= this.confirmUntil,
       };
     }
+    if (!request && this.screenVisible()) {
+      const s = this.sessions.get(this.screen.key);
+      const def = this.slotDefs.find(d => d.id === s.slot);
+      request = {
+        id: 'screen', source: 'screen', slot: s.slot, who: def ? def.name : s.name, folder: s.root,
+        tool: this.stalled(s, t).entry.tool, summary: this.screen.question, danger: this.screen.detail,
+        held: false, armedIn: 0, confirm: false,
+      };
+    }
     const latest = [...this.sessions.values()].filter(s => s.effort).sort((a, b) => b.lastSeen - a.lastSeen)[0];
     const effort = latest ? { level: latest.effort, who: this.titleOf(latest) } : null;
     const others = [...this.requests.values()].filter(r => r.id !== this.target)
       .map(r => { const s = this.sessions.get(r.key); return s ? this.titleOf(s) : 'a closed session'; });
     return {
       now: t,
+      version: this.version,
       settings: { muted: this.settings.muted, fromPad: this.settings.fromPad, holdSeconds: this.settings.holdSeconds },
       slots, overflow, request, others, pending: this.requests.size, effort,
       log: this.log,
@@ -568,7 +694,7 @@ export class PadState {
   // Only what is needed to bring alerts back after a restart. No prompts, commands or file contents.
   toJSON() {
     return {
-      version: 1,
+      version: 2,
       memory: this.memory,
       settings: { muted: this.settings.muted, fromPad: this.settings.fromPad },
       sessions: [...this.sessions.values()].filter(s => !s.test).map(s => ({
@@ -579,12 +705,13 @@ export class PadState {
   }
 
   restore(saved) {
-    if (!saved || saved.version !== 1) return;
+    if (!saved || (saved.version !== 1 && saved.version !== 2)) return;
     const m = saved.memory || {};
     this.memory = { bySession: { ...(m.bySession || {}) }, byFolder: { ...(m.byFolder || {}) }, toolsSeen: [...(m.toolsSeen || [])] };
     if (saved.settings) {
       this.settings.muted = !!saved.settings.muted;
-      this.settings.fromPad = !!saved.settings.fromPad;
+      // Version 1 files always held `false` here because that was the old default, not a choice.
+      if (saved.version >= 2 && typeof saved.settings.fromPad === 'boolean') this.settings.fromPad = saved.settings.fromPad;
     }
     const valid = new Set(this.slotDefs.map(d => d.id));
     for (const s of saved.sessions || []) {

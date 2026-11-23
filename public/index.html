@@ -37,6 +37,7 @@ button{font:inherit;color:inherit}
 /* ---------- header ---------- */
 .top{display:grid;gap:10px}
 .top-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px}
+.ver{font:400 12px/1.2 var(--font-mono);color:var(--ink-3)}
 h1{margin:0;font:600 clamp(26px,4vw,34px)/1.05 var(--font-label);letter-spacing:.05em;text-transform:uppercase}
 .sim-chip{display:inline-flex;align-items:center;gap:8px;font:500 12px/1 var(--font-mono);color:var(--ink-2);
   border:1px solid var(--line-2);border-radius:999px;padding:6px 11px}
@@ -293,6 +294,7 @@ h2{margin:0;font:600 12px/1 var(--font-label);letter-spacing:.16em;text-transfor
     <div class="top-row">
       <h1>Agent Pad</h1>
       <span class="sim-chip" id="chip" data-live="false">Connecting…</span>
+      <span class="ver" id="ver" title="The version of Agent Pad this page is talking to. CHANGELOG.md lists what each version added."></span>
     </div>
     <p class="lede">Live view of your agents. Each key lights up from real session events. Click a key the way you would press it.</p>
   </header>
@@ -376,7 +378,7 @@ h2{margin:0;font:600 12px/1 var(--font-label);letter-spacing:.16em;text-transfor
         <li><span class="dot" data-state="off"></span>No events yet</li>
       </ul>
 
-      <p class="note">New chat, Copy, Paste, the dial and the joystick send their shortcut to the Claude window. They never press Enter for you. Usage has no data source yet.</p>
+      <p class="note">New chat, Copy, Paste, the dial and the joystick send their shortcut to the Claude window. Turning the dial changes effort; no press is needed. Nothing here ever sends Enter. Usage has no data source yet.</p>
     </section>
 
     <div class="console">
@@ -460,6 +462,7 @@ function renderChip() {
   const chip = $('#chip');
   chip.dataset.live = String(live);
   chip.textContent = live ? 'Live · bridge connected' : (snap ? 'Bridge offline · lights paused' : 'Connecting…');
+  $('#ver').textContent = snap && snap.version ? `Version ${snap.version}` : '';
 }
 function renderPad() {
   const muted = snap && snap.settings.muted;
@@ -504,7 +507,7 @@ function renderCard() {
   const r = snap.request, fromPad = snap.settings.fromPad;
   $('#frompad').setAttribute('aria-checked', String(fromPad));
   const armed = r && r.armedIn <= 0;
-  const sig = [r ? r.id : 'none', r && r.held, r && r.confirm, armed, snap.pending, fromPad, snap.others.join()].join('|');
+  const sig = [r ? r.id : 'none', r && r.summary, r && r.held, r && r.confirm, armed, snap.pending, fromPad, snap.others.join()].join('|');
   if (sig === cardSig) return;
   cardSig = sig;
   const el = $('#card');
@@ -525,10 +528,12 @@ function renderCard() {
     foot = [armed ? 'You can also answer it in the app; whichever answer comes first counts.' : 'Accept and Deny unlock after 1 second.', also].filter(Boolean).join(' ');
   } else {
     actions = '';
-    foot = [fromPad ? 'Answer this one in the app.' : 'Approving from the pad is off, so answer this one in the app.', also].filter(Boolean).join(' ');
+    foot = [r.source === 'screen'
+      ? 'Read from the Claude window. This prompt belongs to the Claude app, so the pad cannot answer it. Answer it in Claude.'
+      : fromPad ? 'Answer this one in the app.' : 'Approving from the pad is off, so answer this one in the app.', also].filter(Boolean).join(' ');
   }
   el.innerHTML = `<div class="card">
-    <div class="card-head"><span class="dot" data-state="needs"></span><span><strong>${esc(r.who)}</strong> wants to use</span><span class="tool">${esc(r.tool)}</span></div>
+    <div class="card-head"><span class="dot" data-state="needs"></span><span><strong>${esc(r.who)}</strong> ${r.source === 'screen' ? 'is asking in the Claude window' : 'wants to use'}</span><span class="tool">${esc(r.tool)}</span></div>
     ${r.summary ? `<pre class="cmd">${esc(r.summary)}</pre>` : ''}
     ${r.folder ? `<div class="where">in ${esc(r.folder)}</div>` : ''}
     ${r.danger && r.held ? `<p class="danger">${esc(r.danger)}. ${r.confirm ? 'Press Accept again to confirm.' : 'Accept needs two presses.'}</p>` : ''}
@@ -541,8 +546,8 @@ function renderReadouts() {
   const e = snap && snap.effort;
   $$('#ladder li').forEach((li, i) => li.classList.toggle('set', !!e && EFFORT[i] === e.level));
   $('#effort-hint').textContent = e
-    ? `Reported by ${e.who}. Press the dial to open the effort menu in Claude`
-    : 'Not reported yet. Press the dial to open the effort menu in Claude';
+    ? `Reported by ${e.who}. Turn the dial to change it`
+    : 'Not reported yet. Turn the dial to change it';
   const at = e ? EFFORT.indexOf(e.level) : -1;
   const dial = $('#dial'); dial.setAttribute('aria-valuenow', Math.max(0, at)); dial.setAttribute('aria-valuetext', e ? e.level : 'unknown');
 }
@@ -599,8 +604,9 @@ $('#touch').addEventListener('click', () => {
   renderPad();
 });
 
-// The dial and joystick send real shortcuts to the Claude window. They never send Enter:
-// you pick the menu item yourself, so nothing here can confirm a prompt by accident.
+// The dial and joystick send real shortcuts to the Claude window. They never send Enter.
+// Turning the dial is the whole gesture: the bridge opens the effort menu, moves, and confirms
+// the highlighted level only after checking that it really is an effort level.
 function dialPress() { act('dial-press'); }
 function dialTurn(dir) { act(dir > 0 ? 'dial-right' : 'dial-left'); }
 function stickPush(dir) { act('stick-' + dir); }

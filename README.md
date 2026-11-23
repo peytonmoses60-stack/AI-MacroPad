@@ -9,7 +9,7 @@ Everything stays on your computer. The bridge only listens on `127.0.0.1`, the p
 ## Set it up (Windows)
 
 1. Install Node.js 20 or newer from nodejs.org if `node -v` does not work in a terminal.
-2. Unzip this folder somewhere permanent, for example `C:\agent-pad`. The hooks point at this location, so pick a spot and leave it there.
+2. Put this folder somewhere permanent, ideally inside your user folder (for example `C:\Users\<you>\agent-pad`), which is private to your account. A folder at the top of `C:` can be read and changed by other accounts on the PC. The hooks point at this location, so pick a spot and leave it there.
 3. Start the bridge by double-clicking `Start Agent Pad.cmd` in the folder. There is nothing to install first. (From a terminal, `npm start` does the same.)
 
    Your browser opens the pad at `http://127.0.0.1:47600`. Leave that window open; closing it stops the pad.
@@ -88,6 +88,8 @@ The 15-second guess is set by `stall` in `config.json`. `seconds` is the default
 
 ## What is not done yet
 
+`docs/ROADMAP.md` has the full plan and what has and has not been confirmed on a real Windows PC. The short list:
+
 - **Codex, Gemini and Muse keys stay dark.** The bridge accepts their events (the helper takes the tool name as its first argument), but nothing installs hooks for them yet.
 - **Usage** has no data source.
 - **A terminal command waiting for permission** is only shown if Claude reports the request. Terminal commands are excluded from the 15-second guess because they often run long.
@@ -103,7 +105,8 @@ The 15-second guess is set by `stall` in `config.json`. `seconds` is the default
 | `src/install-hooks.js` | Adds or removes the hooks |
 | `public/index.html` | The pad page |
 | `Start Agent Pad.cmd` | Double-click to start the bridge on Windows |
-| `CLAUDE.md` | Instructions for a Claude session opened on this folder |
+| `CLAUDE.md`, `AGENTS.md` | The rules and working brief for an AI agent opened on this folder |
+| `docs/ROADMAP.md` | The plan: what is confirmed, what is next, and the portable-profile design |
 | `docs/project-background.md` | The review findings and decisions behind the project |
 | `config.json` | Port, key names, pinned folders, shortcuts (created on first start) |
 | `data/` | Access token, saved key states, event trace (created on first start) |

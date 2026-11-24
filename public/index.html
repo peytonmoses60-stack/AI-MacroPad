@@ -140,6 +140,38 @@ h2{margin:0;font:600 12px/1 var(--font-label);letter-spacing:.16em;text-transfor
 @keyframes breathe{0%,100%{opacity:.32}50%{opacity:1}}
 @keyframes blink{0%{opacity:.9}50%{opacity:.12}100%{opacity:.9}}
 
+/* edge light: the RGB strip in the groove between the case and the plate. Dark unless something wants you.
+   chase: one streak per waiting session, in its colour, running round while the whole strip surges.
+   glow: only finished sessions are left. A new arrival strobes (burst); a new finish runs a green lap. */
+@property --spin{syntax:'<angle>';inherits:true;initial-value:0deg}
+.pad-wrap{isolation:isolate}
+.edge{position:absolute;inset:3.3cqw;border-radius:7.6cqw;pointer-events:none;opacity:0;transition:opacity .4s ease}
+.edge-halo{position:absolute;inset:0;border-radius:inherit;filter:blur(1.5cqw)}
+.edge-halo .ring{--w:2.4cqw}
+.ring{position:absolute;inset:0;border-radius:inherit;border:var(--w,max(2px,.75cqw)) solid transparent;
+  -webkit-mask:linear-gradient(#000 0 0) padding-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
+  mask:linear-gradient(#000 0 0) padding-box exclude,linear-gradient(#000 0 0)}
+.ring.base{background:var(--edge-c,transparent) border-box;opacity:.45}
+.ring.run{background:conic-gradient(from var(--spin),var(--edge-paint,transparent 0deg,transparent 360deg)) border-box}
+.spill{position:absolute;inset:0;z-index:-1;border-radius:inherit;pointer-events:none;opacity:0;transition:opacity .4s ease;
+  box-shadow:0 0 12cqw 3cqw color-mix(in srgb,var(--edge-c,transparent) 60%,transparent)}
+.edge[data-pattern="chase"],.edge[data-pattern="glow"]{opacity:1}
+.edge[data-pattern="chase"]{animation:spin 1.5s linear infinite}
+.edge[data-pattern="chase"] .base{animation:surge .9s ease-in-out infinite}
+.edge[data-pattern="chase"]+.spill{opacity:1;animation:surge .9s ease-in-out infinite}
+.edge[data-pattern="glow"] .base{opacity:.8;animation:soft 3.8s ease-in-out infinite}
+.edge[data-pattern="glow"] .run{opacity:0}
+.edge[data-pattern="glow"]+.spill{opacity:.45}
+.edge.burst .base,.edge.burst+.spill{animation:burst .9s linear}
+.edge.lap{animation:spin .8s linear 2}
+.edge.lap .run{opacity:1}
+.edge.lap .base{opacity:.25;animation:none}
+.pad[data-edge="false"] .edge,.pad[data-edge="false"] .spill{display:none}
+.pad[data-dark="true"] .edge,.pad[data-dark="true"] .spill{opacity:0;animation:none}
+@keyframes spin{to{--spin:360deg}}
+@keyframes surge{0%,100%{opacity:.2}50%{opacity:.7}}
+@keyframes burst{0%,34%,68%{opacity:1}17%,51%,85%{opacity:.08}100%{opacity:.2}}
+
 /* dial: matte black cylinder with a slot across the top */
 .dial{position:relative;width:88%;aspect-ratio:1;border-radius:50%;cursor:grab;touch-action:none;outline-offset:5px;
   background:radial-gradient(circle at 38% 30%,var(--blk-hi),var(--blk-lo) 72%);
@@ -283,7 +315,7 @@ h2{margin:0;font:600 12px/1 var(--font-label);letter-spacing:.16em;text-transfor
 .log .none{display:block;color:var(--ink-3)}
 
 @media (prefers-reduced-motion:reduce){
-  .light,.dot,.ro,.card-actions::after{animation:none !important}
+  .light,.dot,.ro,.card-actions::after,.edge,.edge .ring,.spill{animation:none !important}
   .cap,.dial,.dial-mark,.stick-cap,.light{transition:none !important}
 }
 </style>
@@ -302,7 +334,8 @@ h2{margin:0;font:600 12px/1 var(--font-label);letter-spacing:.16em;text-transfor
   <main class="stage">
     <section class="deck" aria-label="Pad, seen from above">
       <div class="pad-wrap">
-        <div class="pad" id="pad" data-dark="true" data-labels="true">
+        <div class="pad" id="pad" data-dark="true" data-labels="true" data-edge="true">
+          <span class="edge" id="edge" data-pattern="off" aria-hidden="true"><span class="edge-halo"><i class="ring base"></i><i class="ring run"></i></span><i class="ring base"></i><i class="ring run"></i></span><span class="spill" aria-hidden="true"></span>
           <div class="plate">
             <span class="screw s1"></span><span class="screw s2"></span><span class="screw s3"></span><span class="screw s4"></span>
             <span class="silk silk-top" aria-hidden="true">↑</span>
@@ -364,6 +397,7 @@ h2{margin:0;font:600 12px/1 var(--font-label);letter-spacing:.16em;text-transfor
           <dd>
             <button class="switch" type="button" role="switch" aria-checked="true" id="mute">Lights</button>
             <button class="switch" type="button" role="switch" aria-checked="true" id="labels">Key labels</button>
+            <button class="switch" type="button" role="switch" aria-checked="true" id="edgelight">Edge light</button>
           </dd>
         </div>
       </dl>
@@ -377,6 +411,8 @@ h2{margin:0;font:600 12px/1 var(--font-label);letter-spacing:.16em;text-transfor
         <li><span class="dot" data-state="error"></span>Error</li>
         <li><span class="dot" data-state="off"></span>No events yet</li>
       </ul>
+
+      <p class="note">The edge light runs round the pad while anything needs you: one streak per waiting session, in its colour, including sessions with no key. It glows green when only finished sessions are left. On the real pad, whether software can drive the edge strip is not confirmed yet.</p>
 
       <p class="note">New chat, Copy, Paste, the dial and the joystick send their shortcut to the Claude window. Turning the dial changes effort; no press is needed. Nothing here ever sends Enter. Usage has no data source yet.</p>
     </section>
@@ -567,7 +603,35 @@ function renderLog() {
     `<li><time>${new Date(e.t + skew).toLocaleTimeString([], { hour12: false })}</time><span class="tag">${esc(e.tag)}</span><span class="msg">${esc(e.msg)}</span></li>`).join('')
     : '<li><span class="none">Nothing yet. Events from your sessions will show here.</span></li>';
 }
-function render() { renderChip(); renderPad(); renderAgents(); renderCard(); renderReadouts(); renderBench(); renderLog(); }
+// The edge light. The bridge says which sessions want you (snap.edge); this paints one streak per session
+// and plays a strobe when a new one starts wanting you, or a green lap when a new one finishes.
+const EDGE_LED = { needs: '--led-need', ask: '--led-ask', error: '--led-err', done: '--led-done' };
+const EDGE_MAX = 8;
+let edgeSeen = null;
+function edgePaint(beads) {
+  const list = beads.slice(0, EDGE_MAX), arc = 360 / Math.max(1, list.length), tail = Math.min(120, arc * 0.85);
+  return list.map((b, i) => {
+    const a = i * arc;
+    return `transparent ${a}deg, var(${EDGE_LED[shown(b)]}) ${(a + tail).toFixed(1)}deg, transparent ${(a + tail).toFixed(1)}deg`;
+  }).join(', ') || 'transparent 0deg, transparent 360deg';
+}
+function flare(el, cls, ms) {
+  el.classList.remove('burst', 'lap'); void el.offsetWidth; el.classList.add(cls);
+  clearTimeout(el._flare); el._flare = setTimeout(() => el.classList.remove(cls), ms);
+}
+function renderEdge() {
+  const e = snap && snap.edge, el = $('#edge');
+  if (!e) { el.dataset.pattern = 'off'; return; }
+  el.dataset.pattern = e.pattern;
+  const top = e.beads[0];
+  pad.style.setProperty('--edge-c', top ? `var(${EDGE_LED[shown(top)]})` : 'transparent');
+  pad.style.setProperty('--edge-paint', edgePaint(e.beads));
+  const ids = new Set(e.beads.map(b => `${b.who}|${shown(b)}`));
+  const fresh = edgeSeen && [...ids].some(id => !edgeSeen.has(id));
+  edgeSeen = ids;
+  if (fresh && pad.dataset.dark !== 'true') flare(el, e.pattern === 'chase' ? 'burst' : 'lap', e.pattern === 'chase' ? 900 : 1600);
+}
+function render() { renderChip(); renderPad(); renderEdge(); renderAgents(); renderCard(); renderReadouts(); renderBench(); renderLog(); }
 
 /* ---------- live connection ---------- */
 function connect() {
@@ -592,6 +656,10 @@ $('#mute').addEventListener('click', () => { if (snap) api('/api/setting', { nam
 $('#labels').addEventListener('click', e => {
   const on = pad.dataset.labels !== 'true';
   pad.dataset.labels = String(on); e.currentTarget.setAttribute('aria-checked', String(on));
+});
+$('#edgelight').addEventListener('click', e => {
+  const on = pad.dataset.edge !== 'true';
+  pad.dataset.edge = String(on); e.currentTarget.setAttribute('aria-checked', String(on));
 });
 $('#chips').addEventListener('click', e => {
   const c = e.target.closest('[data-sim]'); if (!c) return;

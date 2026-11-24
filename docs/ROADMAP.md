@@ -54,6 +54,7 @@ This is the engineering assessment the review notes asked for.
 | Codex | **Missing.** The bridge accepts its events; nothing sends them yet |
 | Gemini (Windows desktop app) and Muse (browser) | **Unsupported for status.** Neither exposes anything the pad can read. Their keys can open the app; see Phase 5 |
 | Notifications, profile export/import, setup checker | **Missing** |
+| Edge light: the strip round the pad chases in each waiting session's colour, glows green when only finished sessions are left, dark otherwise | Virtual pad only, with tests (`test/edge.test.js`); added 24 Nov at Peyton's request. Seen in a browser with simulated events, not yet on Windows with real sessions. Whether the real pad's edge strip can be driven at all is unknown (M6.6) |
 | Real hardware | **Missing.** No adapter written; Work Louder's official API is pre-release |
 
 One detail relies on inference: the "deny" decision the hook prints follows the documented field table, but no documented example shows it.
@@ -200,6 +201,7 @@ Nothing here is bought on assumption. M6.1 costs nothing.
 | M6.3 | Lights go dark when the bridge stops, crashes or loses the pad | Killing the bridge leaves no key lit after a few seconds |
 | M6.4 | Shortcut keys set as ordinary macros on the pad itself work with no bridge running. Unplug, replug, sleep and wake recover | Each tried on the desktop |
 | M6.5 | The pad plugged into the laptop behaves the same with the imported profile | The Phase 3 acceptance run repeated with hardware |
+| M6.6 | **Edge light on the hardware.** Work Louder's WebSocket guide and input-kit API (read 24 Nov 2026) document `setKeyLighting` for keys bound to API Smart Actions only; nothing targets the edge strip, zones or segments. Ask Work Louder, or check with the pad in hand, whether software can set the strip's colour and effect, and whether it has segments. If it can: drive it from `edge` in the bridge's state, using the device's own effects (breath) rather than animating from the bridge, since every write counts against 60 per 10 seconds over USB, shared with key lighting. If it cannot, the edge light stays on the virtual pad and the keys carry the alerts alone. This does not block the purchase | Known either way, written here |
 
 ## Phase 7: final key map, soak week, and looking across machines
 

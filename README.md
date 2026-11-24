@@ -47,6 +47,8 @@ The version is shown at the top of the pad page, next to the connection status, 
 | A turn fails (for example a rate limit) | Blink red |
 | You close the session | Go dim |
 
+**The edge light** around the pad sums all of this up. It is dark while sessions only work or sit idle. When any session needs you, including one with no key, a streak in its colour runs round the edge, one streak per session, and the whole strip pulses; a new request makes it strobe first. When only finished sessions are left it glows green. The switch under the pad turns it off. It is on the virtual pad only: whether software can drive the real pad's edge strip is not known yet.
+
 Write down any time a session was waiting on you and its key was not amber or purple. That is the number that decides whether the hardware is worth buying.
 
 ## The keys
@@ -122,6 +124,7 @@ The 15-second guess is set by `stall` in `config.json`. `seconds` is the default
 - **The Codex key stays dark.** The bridge accepts its events (the helper takes the tool name as its first argument), but nothing installs hooks for it yet.
 - **The Gemini and Muse keys cannot show status.** The Gemini desktop app and Muse in the browser give other programs nothing to read. The plan is for those keys to open the app.
 - **Usage** has no data source.
+- **The edge light is virtual only.** Work Louder's API documents lighting for keys, not for the edge strip.
 - **A terminal command waiting for permission** is only shown if Claude reports the request. Terminal commands are excluded from the 15-second guess because they often run long.
 
 ## Files

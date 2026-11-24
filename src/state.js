@@ -684,9 +684,24 @@ export class PadState {
       now: t,
       version: this.version,
       settings: { muted: this.settings.muted, fromPad: this.settings.fromPad, holdSeconds: this.settings.holdSeconds },
-      slots, overflow, request, others, pending: this.requests.size, effort,
+      slots, overflow, request, others, pending: this.requests.size, effort, edge: this.edge(t),
       log: this.log,
     };
+  }
+
+  // The edge light around the pad: one bead per session that wants you, most urgent first.
+  // It reads the same view as the keys, so the two never disagree. Sessions without a key count too.
+  // chase: something needs a permission, a reply or a look at a failure. glow: only finished sessions are left.
+  edge(t = this.now()) {
+    const beads = [...this.sessions.values()].sort((a, b) => this.urgency(a, b)).map(s => {
+      const v = this.view(s, t);
+      return { state: v.state, kind: v.kind, guess: v.guess, who: this.titleOf(s) };
+    });
+    const wanting = beads.filter(b => b.state === 'needs' || b.state === 'error');
+    if (wanting.length) return { pattern: 'chase', beads: wanting };
+    const done = beads.filter(b => b.state === 'done');
+    if (done.length) return { pattern: 'glow', beads: done };
+    return { pattern: 'off', beads: [] };
   }
 
   /* ----- saving ----- */

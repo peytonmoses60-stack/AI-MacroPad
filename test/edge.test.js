@@ -57,7 +57,9 @@ test('a session with no key still shows on the edge', () => {
   ev('d', 'PermissionRequest', { tool_name: 'Edit', tool_input: { file_path: 'x.js' } });
   assert.equal(pad.snapshot().overflow.length, 1, 'every key is red, so d has none');
   assert.equal(edge().beads.length, 4);
-  assert.deepEqual(edge().beads[0], { state: 'needs', kind: 'permission', guess: false, who: 'd (no key)' });
+  const { since, ...first } = edge().beads[0];
+  assert.deepEqual(first, { state: 'needs', kind: 'permission', guess: false, who: 'd (no key)' });
+  assert.equal(typeof since, 'number');
 });
 
 test('a stalled-tool guess chases and is marked as a guess, like its key', () => {
@@ -70,6 +72,18 @@ test('a stalled-tool guess chases and is marked as a guess, like its key', () =>
   assert.equal(pad.snapshot().slots[0].guess, true);
 });
 
+test('a bead says when its session started wanting you, so the page can tell a new request from an old one', () => {
+  const { ev, edge, clock } = make();
+  ev('a', 'UserPromptSubmit');
+  ev('a', 'PermissionRequest', { tool_name: 'Edit', tool_input: { file_path: 'x.js' } });
+  const first = edge().beads[0].since;
+  clock.t += 5000;
+  assert.equal(edge().beads[0].since, first, 'the same request keeps its time');
+  ev('a', 'PostToolUse', { tool_name: 'Edit' });
+  ev('a', 'PermissionRequest', { tool_name: 'Edit', tool_input: { file_path: 'y.js' } });
+  assert.ok(edge().beads[0].since > first, 'the next request from the same session is new');
+});
+
 test('the page draws the edge from the snapshot, goes dark with the keys, and has a switch for it', () => {
   const page = fs.readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
   assert.match(page, /id="edge"/);
@@ -77,4 +91,13 @@ test('the page draws the edge from the snapshot, goes dark with the keys, and ha
   assert.match(page, /\.pad\[data-dark="true"\] \.edge/);
   assert.match(page, /role="switch"[^>]*id="edgelight"/);
   assert.match(page, /@media \(prefers-reduced-motion:reduce\)\{[^}]*\.edge/);
+  assert.match(page, /\.light,\.edge,\.spill\{transition:none !important\}/, 'its fade stops for reduce motion too');
+});
+
+test('the arrival strobe stays under three flashes a second', () => {
+  const page = fs.readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+  const seconds = Number(page.match(/animation:burst ([\d.]+)s/)[1]);
+  const frames = page.match(/@keyframes burst\{([^}]*\}[^}]*\}[^}]*\})\}/)[1];
+  const dark = frames.match(/[\d,%]+\{opacity:\.0\d\}/)[0].split('{')[0].split(',').length;
+  assert.ok(dark / seconds < 3, `${dark} flashes in ${seconds}s`);
 });

@@ -695,7 +695,7 @@ export class PadState {
   edge(t = this.now()) {
     const beads = [...this.sessions.values()].sort((a, b) => this.urgency(a, b)).map(s => {
       const v = this.view(s, t);
-      return { state: v.state, kind: v.kind, guess: v.guess, who: this.titleOf(s) };
+      return { state: v.state, kind: v.kind, guess: v.guess, since: v.since, who: this.titleOf(s) };
     });
     const wanting = beads.filter(b => b.state === 'needs' || b.state === 'error');
     if (wanting.length) return { pattern: 'chase', beads: wanting };

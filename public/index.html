@@ -60,7 +60,7 @@ h2{margin:0;font:600 12px/1 var(--font-label);letter-spacing:.16em;text-transfor
 }
 
 /* ---------- the pad ---------- */
-.pad-wrap{position:relative;container-type:inline-size}
+.pad-wrap{position:relative;container-type:inline-size;isolation:isolate}
 .pad{position:relative;padding:6.2cqw;border-radius:10.5cqw;
   background:linear-gradient(150deg,var(--plate-hi),var(--plate) 34%,var(--plate-lo));
   box-shadow:inset 0 1px 0 rgba(255,255,255,.2),inset 0 -2px 0 var(--shadow-deep),0 0 0 1px var(--well),
@@ -141,11 +141,11 @@ h2{margin:0;font:600 12px/1 var(--font-label);letter-spacing:.16em;text-transfor
 @keyframes blink{0%{opacity:.9}50%{opacity:.12}100%{opacity:.9}}
 
 /* edge light: the RGB strip in the groove between the case and the plate. Dark unless something wants you.
-   chase: one streak per waiting session, in its colour, running round while the whole strip surges.
-   glow: only finished sessions are left. A new arrival strobes (burst); a new finish runs a green lap. */
+   chase: one streak per session that needs you or has failed, in its colour, running round while the strip breathes
+   at the keys' rate. glow: only finished sessions are left, steady like a finished key.
+   A new arrival strobes in its own colour, under three flashes a second (burst); a new finish runs a green lap. */
 @property --spin{syntax:'<angle>';inherits:true;initial-value:0deg}
-.pad-wrap{isolation:isolate}
-.edge{position:absolute;inset:3.3cqw;border-radius:7.6cqw;pointer-events:none;opacity:0;transition:opacity .4s ease}
+.edge{position:absolute;inset:3.3cqw;border-radius:7.6cqw;pointer-events:none;opacity:0;transition:opacity .35s ease}
 .edge-halo{position:absolute;inset:0;border-radius:inherit;filter:blur(1.5cqw)}
 .edge-halo .ring{--w:2.4cqw}
 .ring{position:absolute;inset:0;border-radius:inherit;border:var(--w,max(2px,.75cqw)) solid transparent;
@@ -153,24 +153,25 @@ h2{margin:0;font:600 12px/1 var(--font-label);letter-spacing:.16em;text-transfor
   mask:linear-gradient(#000 0 0) padding-box exclude,linear-gradient(#000 0 0)}
 .ring.base{background:var(--edge-c,transparent) border-box;opacity:.45}
 .ring.run{background:conic-gradient(from var(--spin),var(--edge-paint,transparent 0deg,transparent 360deg)) border-box}
-.spill{position:absolute;inset:0;z-index:-1;border-radius:inherit;pointer-events:none;opacity:0;transition:opacity .4s ease;
+.spill{position:absolute;inset:0;z-index:-1;border-radius:inherit;pointer-events:none;opacity:0;transition:opacity .35s ease;
   box-shadow:0 0 12cqw 3cqw color-mix(in srgb,var(--edge-c,transparent) 60%,transparent)}
 .edge[data-pattern="chase"],.edge[data-pattern="glow"]{opacity:1}
 .edge[data-pattern="chase"]{animation:spin 1.5s linear infinite}
-.edge[data-pattern="chase"] .base{animation:surge .9s ease-in-out infinite}
-.edge[data-pattern="chase"]+.spill{opacity:1;animation:surge .9s ease-in-out infinite}
-.edge[data-pattern="glow"] .base{opacity:.8;animation:soft 3.8s ease-in-out infinite}
+.edge[data-pattern="chase"] .base{animation:breathe 1.8s ease-in-out infinite}
+.edge[data-pattern="chase"]+.spill{opacity:1;animation:breathe 1.8s ease-in-out infinite}
+.edge[data-pattern="glow"] .base{opacity:.8}
 .edge[data-pattern="glow"] .run{opacity:0}
 .edge[data-pattern="glow"]+.spill{opacity:.45}
-.edge.burst .base,.edge.burst+.spill{animation:burst .9s linear}
+.edge.burst .base,.edge.burst+.spill{animation:burst 1.2s linear}
+.edge.burst .base{background:var(--edge-burst,var(--edge-c)) border-box}
+.edge.burst+.spill{box-shadow:0 0 12cqw 3cqw color-mix(in srgb,var(--edge-burst,var(--edge-c)) 60%,transparent)}
 .edge.lap{animation:spin .8s linear 2}
 .edge.lap .run{opacity:1}
 .edge.lap .base{opacity:.25;animation:none}
 .pad[data-edge="false"] .edge,.pad[data-edge="false"] .spill{display:none}
-.pad[data-dark="true"] .edge,.pad[data-dark="true"] .spill{opacity:0;animation:none}
+.pad[data-dark="true"] .edge,.pad[data-dark="true"] .edge .ring,.pad[data-dark="true"] .spill{opacity:0;animation:none}
 @keyframes spin{to{--spin:360deg}}
-@keyframes surge{0%,100%{opacity:.2}50%{opacity:.7}}
-@keyframes burst{0%,34%,68%{opacity:1}17%,51%,85%{opacity:.08}100%{opacity:.2}}
+@keyframes burst{0%,33%,67%{opacity:1}17%,50%,83%{opacity:.08}100%{opacity:.32}}
 
 /* dial: matte black cylinder with a slot across the top */
 .dial{position:relative;width:88%;aspect-ratio:1;border-radius:50%;cursor:grab;touch-action:none;outline-offset:5px;
@@ -316,7 +317,7 @@ h2{margin:0;font:600 12px/1 var(--font-label);letter-spacing:.16em;text-transfor
 
 @media (prefers-reduced-motion:reduce){
   .light,.dot,.ro,.card-actions::after,.edge,.edge .ring,.spill{animation:none !important}
-  .cap,.dial,.dial-mark,.stick-cap,.light{transition:none !important}
+  .cap,.dial,.dial-mark,.stick-cap,.light,.edge,.spill{transition:none !important}
 }
 </style>
 </head>
@@ -335,7 +336,7 @@ h2{margin:0;font:600 12px/1 var(--font-label);letter-spacing:.16em;text-transfor
     <section class="deck" aria-label="Pad, seen from above">
       <div class="pad-wrap">
         <div class="pad" id="pad" data-dark="true" data-labels="true" data-edge="true">
-          <span class="edge" id="edge" data-pattern="off" aria-hidden="true"><span class="edge-halo"><i class="ring base"></i><i class="ring run"></i></span><i class="ring base"></i><i class="ring run"></i></span><span class="spill" aria-hidden="true"></span>
+          <span class="edge" id="edge" data-pattern="off" aria-hidden="true"><span class="edge-halo"><span class="ring base"></span><span class="ring run"></span></span><span class="ring base"></span><span class="ring run"></span></span><span class="spill" aria-hidden="true"></span>
           <div class="plate">
             <span class="screw s1"></span><span class="screw s2"></span><span class="screw s3"></span><span class="screw s4"></span>
             <span class="silk silk-top" aria-hidden="true">↑</span>
@@ -412,7 +413,7 @@ h2{margin:0;font:600 12px/1 var(--font-label);letter-spacing:.16em;text-transfor
         <li><span class="dot" data-state="off"></span>No events yet</li>
       </ul>
 
-      <p class="note">The edge light runs round the pad while anything needs you: one streak per waiting session, in its colour, including sessions with no key. It glows green when only finished sessions are left. On the real pad, whether software can drive the edge strip is not confirmed yet.</p>
+      <p class="note">The edge light runs round the pad while any session needs you or has failed: one streak per session in its colour, up to eight, including sessions with no key. It glows green when only finished sessions are left. Whether software can drive the real pad's edge light is not confirmed yet.</p>
 
       <p class="note">New chat, Copy, Paste, the dial and the joystick send their shortcut to the Claude window. Turning the dial changes effort; no press is needed. Nothing here ever sends Enter. Usage has no data source yet.</p>
     </section>
@@ -604,15 +605,18 @@ function renderLog() {
     : '<li><span class="none">Nothing yet. Events from your sessions will show here.</span></li>';
 }
 // The edge light. The bridge says which sessions want you (snap.edge); this paints one streak per session
+// (colours from the same --led-* values as the keys; several at once, so they cannot come from one data-state)
 // and plays a strobe when a new one starts wanting you, or a green lap when a new one finishes.
 const EDGE_LED = { needs: '--led-need', ask: '--led-ask', error: '--led-err', done: '--led-done' };
 const EDGE_MAX = 8;
 let edgeSeen = null;
+const calm = matchMedia('(prefers-reduced-motion: reduce)');
+const edgeColour = b => EDGE_LED[shown(b)] ? `var(${EDGE_LED[shown(b)]})` : '';
 function edgePaint(beads) {
-  const list = beads.slice(0, EDGE_MAX), arc = 360 / Math.max(1, list.length), tail = Math.min(120, arc * 0.85);
+  const list = beads.filter(edgeColour).slice(0, EDGE_MAX), arc = 360 / Math.max(1, list.length), tail = Math.min(120, arc * 0.85);
   return list.map((b, i) => {
     const a = i * arc;
-    return `transparent ${a}deg, var(${EDGE_LED[shown(b)]}) ${(a + tail).toFixed(1)}deg, transparent ${(a + tail).toFixed(1)}deg`;
+    return `transparent ${a}deg, ${edgeColour(b)} ${(a + tail).toFixed(1)}deg, transparent ${(a + tail).toFixed(1)}deg`;
   }).join(', ') || 'transparent 0deg, transparent 360deg';
 }
 function flare(el, cls, ms) {
@@ -623,13 +627,16 @@ function renderEdge() {
   const e = snap && snap.edge, el = $('#edge');
   if (!e) { el.dataset.pattern = 'off'; return; }
   el.dataset.pattern = e.pattern;
-  const top = e.beads[0];
-  pad.style.setProperty('--edge-c', top ? `var(${EDGE_LED[shown(top)]})` : 'transparent');
-  pad.style.setProperty('--edge-paint', edgePaint(e.beads));
-  const ids = new Set(e.beads.map(b => `${b.who}|${shown(b)}`));
-  const fresh = edgeSeen && [...ids].some(id => !edgeSeen.has(id));
-  edgeSeen = ids;
-  if (fresh && pad.dataset.dark !== 'true') flare(el, e.pattern === 'chase' ? 'burst' : 'lap', e.pattern === 'chase' ? 900 : 1600);
+  const beads = e.beads.filter(edgeColour);
+  pad.style.setProperty('--edge-c', beads.length ? edgeColour(beads[0]) : 'transparent');
+  pad.style.setProperty('--edge-paint', edgePaint(beads));
+  // A bead is new when its session, state or the moment it entered that state is new.
+  const id = b => `${b.who}|${shown(b)}|${b.since}`;
+  const fresh = edgeSeen ? beads.find(b => !edgeSeen.has(id(b))) : null;
+  edgeSeen = new Set(beads.map(id));
+  if (!fresh || pad.dataset.dark === 'true' || calm.matches) return;
+  pad.style.setProperty('--edge-burst', edgeColour(fresh));
+  flare(el, e.pattern === 'chase' ? 'burst' : 'lap', e.pattern === 'chase' ? 1200 : 1600);
 }
 function render() { renderChip(); renderPad(); renderEdge(); renderAgents(); renderCard(); renderReadouts(); renderBench(); renderLog(); }
 

@@ -6,7 +6,7 @@ Each version also went out as a zip for the PC. The zip names are in brackets.
 
 ## 0.7.0 (24 Nov 2026)
 
-- **An edge light runs round the virtual pad,** in the groove between the case and the keys, where the real pad has its light strip. It stays dark while sessions only work or sit idle. When anything needs you it chases: one streak per waiting session in that session's colour (amber, purple or red), including sessions with no key, with the whole strip pulsing and glowing onto the desk. A new request strobes it. When only finished sessions are left it glows green, after a green lap for each new finish. It goes dark with the other lights, has its own switch under the pad, and holds still for "reduce motion".
+- **An edge light runs round the virtual pad,** in the groove between the case and the keys, where the real pad has its light strip. It stays dark while sessions only work or sit idle. When anything needs you it chases: one streak per waiting session in that session's colour (amber, purple or red), including sessions with no key, with the whole strip pulsing and glowing onto the desk. A new request strobes it in its own colour, under three flashes a second. When only finished sessions are left it glows green, after a green lap for each new finish. It goes dark with the other lights, has its own switch under the pad, and holds still for "reduce motion".
 - The bridge works out what the edge shows (`edge` in its state), from the same view as the keys, so the two cannot disagree and a hardware adapter can use it later.
 - **Not known yet:** whether software can drive the real pad's edge strip. Work Louder's API documents per-key lighting only. Added to Phase 6 of the roadmap.
 
